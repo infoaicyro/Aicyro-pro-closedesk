@@ -3,8 +3,10 @@ import OpenAI from "openai";
 import { db } from "../../lib/firebase";
 import { ref, set, get, update, push } from "firebase/database";
 import { getMasterRuleBook, POLICY_VERSION } from "../../lib/ruleBook";
-// 1. Import the middleware
 import { withApiLogger } from "../../lib/apiMiddleware";
+
+// 🔥 TICKET 5: Import the AI Tracer tools
+import { traceAiExecution, safeParseAiResponse } from "../../lib/aiTracer";
 
 function generateHash(str) {
   let hash = 5381;
@@ -61,8 +63,6 @@ function validateAndSanitizePayload(aiResponse) {
     intent_object: Array.isArray(aiResponse.intent_object)
       ? aiResponse.intent_object
       : [],
-
-    // ADD URGENCY LEVEL HERE:
     urgency_level:
       typeof aiResponse.urgency_level === "string"
         ? aiResponse.urgency_level
@@ -157,7 +157,7 @@ async function logAnalyticsEvent(
     };
     await push(ref(db, `analytics_events`), logPayload);
   } catch (err) {
-    apiLogger.error("Failed to write to analytics logger", err);
+    console.error("Failed to write to analytics logger", err);
   }
 }
 
@@ -205,9 +205,13 @@ async function handler(req, res, apiLogger) {
     } else {
       userRateData.count++;
       if (userRateData.count > MAX_REQUESTS_PER_WINDOW) {
-        apiLogger.warn(
-          `[SECURITY_EVENT] Rate limit exceeded for session: ${session_id}`,
-        );
+        // Structured Logging Update
+        apiLogger.warn("security_audit", "rate_limit_exceeded", {
+          context: {
+            session_id,
+            message: "User sending messages too quickly.",
+          },
+        });
         await logAnalyticsEvent(
           session_id,
           channel,
@@ -231,9 +235,13 @@ async function handler(req, res, apiLogger) {
     let injectionDetected = false;
 
     if (injectionPattern.test(lastUserMessage)) {
-      apiLogger.warn(
-        `[SECURITY_EVENT] Potential prompt injection attempt in session: ${session_id}`,
-      );
+      // Structured Logging Update
+      apiLogger.warn("security_audit", "prompt_injection_detected", {
+        context: {
+          session_id,
+          message: "Potential prompt injection attempt blocked.",
+        },
+      });
       injectionDetected = true;
     }
 
@@ -251,10 +259,10 @@ async function handler(req, res, apiLogger) {
         existingProspect = prospectSnap.val() || {};
       }
     } catch (fbReadErr) {
-      apiLogger.warn(
-        "Failed to pre-fetch prospect state in chat endpoint:",
-        fbReadErr,
-      );
+      apiLogger.warn("database", "firebase_read_failed", {
+        context: { message: "Failed to pre-fetch prospect state" },
+        error: fbReadErr,
+      });
     }
 
     const serverContextPatch = existingProspect.context_patch || {};
@@ -311,29 +319,59 @@ async function handler(req, res, apiLogger) {
     let retries = 2;
     let lastModelError = null;
 
+    // 🔥 TICKET 5: Define the AI Context for Tracer Logging
+    const aiContext = {
+      ai_model: botConfig.aiModel || "gpt-4o-mini",
+      prompt_version: sessionVersions.config_snapshot,
+      conversation_state:
+        existingProspect.state ||
+        (isFirstMessage ? "initial_greeting" : "in_progress"),
+      detected_intent: existingProspect.intent_object
+        ? existingProspect.intent_object[0]
+        : "general_chat",
+      rag_used: !!retrievedKnowledge,
+    };
+
     // --- LLM & SCHEMA EXECUTION BLOCK ---
     while (retries > 0) {
       try {
-        const completion = await openai.chat.completions.create({
-          model: botConfig.aiModel || "gpt-4o-mini",
+        // 🔥 TICKET 5: Wrap the execution promise
+        const llmPromise = openai.chat.completions.create({
+          model: aiContext.ai_model,
           response_format: { type: "json_object" },
           messages: [{ role: "system", content: instructions }, ...messages],
           temperature: parseFloat(botConfig.temperature ?? 0.4),
           max_tokens: 500,
         });
 
+        // 🔥 TICKET 5: Use the Tracer to securely execute and log the LLM call
+        const completion = await traceAiExecution(
+          apiLogger,
+          llmPromise,
+          aiContext,
+        );
+
         const rawContent = completion.choices[0].message.content;
-        const aiResponse = JSON.parse(rawContent);
+
+        // 🔥 TICKET 5: Use the safe parser to catch JSON hallucinations and log them
+        const aiResponse = safeParseAiResponse(
+          apiLogger,
+          rawContent,
+          aiContext,
+        );
+
         validatedData = validateAndSanitizePayload(aiResponse);
         break;
       } catch (err) {
         lastModelError = err;
         errorCategory =
           err instanceof SyntaxError ? "schema_failure" : "model_failure";
-        apiLogger.warn(
-          `[${errorCategory.toUpperCase()}] LLM/Parse failed. Retries left: ${retries - 1}. Reason:`,
-          err.message,
-        );
+        apiLogger.warn("ai_lifecycle", "ai_retry_triggered", {
+          context: {
+            message: `LLM/Parse failed. Retries left: ${retries - 1}`,
+          },
+          error: err,
+        });
         retries--;
       }
     }
@@ -352,7 +390,6 @@ async function handler(req, res, apiLogger) {
 
     const serverTimestamp = new Date().toISOString();
 
-    // Unified context & privacy merge across modes
     const finalContact = {
       ...serverContact,
       ...(validatedData.context_patch.contact_info || {}),
@@ -455,7 +492,6 @@ async function handler(req, res, apiLogger) {
               validatedData.factual_summary = null;
               updates[flag].status = "completed";
 
-              // Force drop the unified voice/text transcripts for this session
               await set(ref(db, `transcripts/${session_id}`), null);
             }
           }
@@ -491,10 +527,11 @@ async function handler(req, res, apiLogger) {
       next_action: backendPayload.next_action,
     });
   } catch (error) {
-    apiLogger.error(
-      `[${errorCategory.toUpperCase()}] Chatbot Engine Error:`,
+    // Structured Logging Update
+    apiLogger.error("system_event", "chatbot_engine_failure", {
       error,
-    );
+      context: { errorCategory },
+    });
 
     logAnalyticsEvent(
       sessionIdForErrorLog,
@@ -531,4 +568,5 @@ async function handler(req, res, apiLogger) {
     });
   }
 }
+
 export default withApiLogger(handler, "Text-Chat-API");
