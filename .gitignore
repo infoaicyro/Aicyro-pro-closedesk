@@ -17,9 +17,6 @@ dist-ssr/
 .env.production.local
 *.local
 
-# Functions
-functions/
-
 # Logs
 logs/
 *.log

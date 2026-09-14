@@ -11,12 +11,13 @@ import {
 } from "../../lib/activityTracker";
 import { getOrCreateAnonId } from "../../lib/cookiePersonalization";
 
-// Implemented Phase 1 Tracing & Logging
+// Implemented Phase 1 & 2 Tracing
 import { createAiLogger, createVoiceLogger } from "../../lib/loggerPresets";
 import { generateCorrelationId, fetchWithTrace } from "../../lib/tracer";
 
 const uiLogger = createAiLogger("ChatbotWidget");
 const voiceLogger = createVoiceLogger("VoiceAgent");
+
 // ─── Constants & Mappings ─────────────────────────────────────────────────────
 const AVATAR_MAP = {
   ai_spark: "/avatars/ai-spark.svg",
@@ -152,8 +153,8 @@ const TypewriterBubble = ({
     isMutedRef.current = isMuted;
     onSpeakRef.current = onSpeak;
   }, [isMuted, onSpeak]);
+
   useEffect(() => {
-    // 🚨 TICKET 3: widget_loaded
     uiLogger.info("ui_render", "widget_loaded", {
       context: { message: "Chatbot initialized" },
     });
@@ -221,8 +222,7 @@ const TypewriterBubble = ({
         {!isTypingText && (
           <button
             onClick={() => onSpeak(msg.text)}
-            className="ml-2 inline-flex items-center text-xs opacity-60 hover:opacity-100 transition-opacity focus-visible:ring-2 focus-visible:ring-[var(--primary)] outline-none rounded"
-            aria-label="Read message aloud"
+            className="ml-2 inline-flex items-center text-xs opacity-60 hover:opacity-100 transition-opacity outline-none rounded"
             title="Read Aloud"
             type="button"
           >
@@ -244,7 +244,7 @@ const TypewriterBubble = ({
                 key={btn.value}
                 onClick={() => onButtonClick(btn.value, btn.label)}
                 disabled={isProcessing}
-                className={`text-[13px] font-semibold px-4 py-2.5 rounded-xl transition-all duration-200 text-center border focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[var(--primary)] outline-none ${isProcessing ? "opacity-50 cursor-not-allowed " : "hover:scale-[1.02] active:scale-95"} ${isCTA ? "bg-[var(--primary)] border-transparent text-white shadow-[0_0_15px_var(--lead-glow)] hover:shadow-[0_0_20px_var(--lead-glow)]" : "bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--card-bg)]"}`}
+                className={`text-[13px] font-semibold px-4 py-2.5 rounded-xl transition-all duration-200 text-center border focus-visible:ring-2 focus-visible:ring-[var(--primary)] outline-none ${isProcessing ? "opacity-50 cursor-not-allowed " : "hover:scale-[1.02] active:scale-95"} ${isCTA ? "bg-[var(--primary)] border-transparent text-white shadow-[0_0_15px_var(--lead-glow)] hover:shadow-[0_0_20px_var(--lead-glow)]" : "bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--card-bg)]"}`}
               >
                 {btn.label}
               </button>
@@ -287,9 +287,8 @@ export default function AicyroChatbot() {
   const turnMetricsRef = useRef(null);
 
   useEffect(() => {
-    if (voiceCallRef.current && voiceCallRef.current.audioEl) {
+    if (voiceCallRef.current && voiceCallRef.current.audioEl)
       voiceCallRef.current.audioEl.muted = isMuted;
-    }
     if (isMuted) stopSpeech();
   }, [isMuted]);
 
@@ -545,22 +544,6 @@ export default function AicyroChatbot() {
             "start",
           );
         }
-        fetchWithTrace(
-          "/api/sync-voice",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              session_id: firebaseDbId,
-              action: "log_telemetry",
-              telemetry_data: {
-                setup_duration_ms: Date.now() - setupStartTime,
-                versions: telemetryRef.current.versions,
-              },
-            }),
-          },
-          txId,
-        ).catch(() => {});
       };
 
       dataChannel.onclose = () => {
@@ -652,54 +635,52 @@ export default function AicyroChatbot() {
                   channel: "voice",
                 },
               ]);
-              const sttTxId = generateCorrelationId();
-              fetchWithTrace(
-                "/api/sync-voice",
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    session_id: firebaseDbId,
-                    action: "log_transcript",
-                    role: "user",
-                    text: event.transcript,
-                  }),
-                },
-                sttTxId,
-              ).catch((err) =>
-                callLogger.error("telemetry", "transcript_sync_failed", {
-                  error: err,
-                }),
-              );
             }
           }
 
-          if (
-            event.type === "response.audio_transcript.done" ||
-            event.type === "response.output_audio_transcript.done"
-          ) {
-            if (event.transcript?.trim()) {
-              const sttTxId = generateCorrelationId();
-              fetchWithTrace(
-                "/api/sync-voice",
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    session_id: firebaseDbId,
-                    action: "log_transcript",
-                    role: "assistant",
-                    text: event.transcript,
-                  }),
-                },
-                sttTxId,
-              ).catch(() => {});
-            }
-          }
-
+          // 🔥 TICKET 7: AI Tool Call Execution (WebRTC Mode)
           if (event.type === "response.function_call_arguments.done") {
             const toolStart = Date.now();
             const toolTxId = generateCorrelationId();
+
+            // 🚨 TICKET 7: Safely parse parameters to catch AI hallucinations
+            let parsedArgs;
+            try {
+              parsedArgs = JSON.parse(event.arguments);
+            } catch (parseError) {
+              uiLogger.error("ai_tool", "tool_call_failed", {
+                error: parseError,
+                context: {
+                  tool_name: event.name,
+                  tool_call_id: event.call_id,
+                  result_status: "invalid_parameters",
+                },
+                metadata: {
+                  raw_args_snippet:
+                    String(event.arguments).substring(0, 50) + "...",
+                },
+              });
+
+              dataChannel.send(
+                JSON.stringify({
+                  type: "conversation.item.create",
+                  item: {
+                    type: "function_call_output",
+                    call_id: event.call_id,
+                    output: JSON.stringify({ error: "Invalid JSON Schema" }),
+                  },
+                }),
+              );
+              dataChannel.send(JSON.stringify({ type: "response.create" }));
+              return;
+            }
+
+            // 🚨 TICKET 7: Log tool execution started
+            uiLogger.info("ai_tool", "tool_call_started", {
+              context: { tool_name: event.name, tool_call_id: event.call_id },
+              metadata: { args: parsedArgs }, // CloseDeskLogger auto-redacts PII!
+            });
+
             fetchWithTrace(
               "/api/sync-voice",
               {
@@ -708,18 +689,31 @@ export default function AicyroChatbot() {
                 body: JSON.stringify({
                   session_id: firebaseDbId,
                   tool_name: event.name,
-                  tool_args: JSON.parse(event.arguments),
+                  tool_args: parsedArgs,
                 }),
               },
               toolTxId,
             )
               .then((res) => res.json())
               .then((result) => {
+                const duration_ms = Date.now() - toolStart;
+
+                // 🚨 TICKET 7: Log tool success
+                uiLogger.info("ai_tool", "tool_call_success", {
+                  context: {
+                    tool_name: event.name,
+                    tool_call_id: event.call_id,
+                    result_status: "success",
+                  },
+                  duration_ms,
+                });
+
                 if (turnMetricsRef.current)
                   turnMetricsRef.current.tools.push({
                     name: event.name,
-                    duration_ms: Date.now() - toolStart,
+                    duration_ms,
                   });
+
                 dataChannel.send(
                   JSON.stringify({
                     type: "conversation.item.create",
@@ -733,11 +727,19 @@ export default function AicyroChatbot() {
                 dataChannel.send(JSON.stringify({ type: "response.create" }));
               })
               .catch((err) => {
-                logVoiceError(
-                  "TOOL_EXECUTION",
-                  `Failed to execute tool ${event.name}`,
-                  err.message,
-                );
+                const duration_ms = Date.now() - toolStart;
+
+                // 🚨 TICKET 7: Log explicit tool failure (distinguishes backend fail vs AI fail)
+                uiLogger.error("ai_tool", "tool_call_failed", {
+                  error: err,
+                  context: {
+                    tool_name: event.name,
+                    tool_call_id: event.call_id,
+                    result_status: "failed",
+                  },
+                  duration_ms,
+                });
+
                 dataChannel.send(
                   JSON.stringify({
                     type: "conversation.item.create",
@@ -799,7 +801,6 @@ export default function AicyroChatbot() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Do NOT wrap OpenAI direct call with trace headers (CORS safety)
       const sdpResponse = await fetch(
         "https://api.openai.com/v1/realtime/calls",
         {
@@ -868,7 +869,6 @@ export default function AicyroChatbot() {
   };
 
   const handleToggleMode = async () => {
-    // 🚨 TICKET 3: voice_button_clicked
     uiLogger.info("user_action", "voice_button_clicked", {
       context: {
         message: `Switching to ${agentMode === "text" ? "voice" : "text"}`,
@@ -1066,7 +1066,6 @@ export default function AicyroChatbot() {
             v === undefined || v === null ? "" : v,
           ]),
         );
-
         const txId = generateCorrelationId();
         fetchWithTrace(
           "/api/leads",
@@ -1227,7 +1226,6 @@ export default function AicyroChatbot() {
   }
 
   function handleCloseChat() {
-    // 🚨 TICKET 3: widget_closed
     uiLogger.info("user_action", "widget_closed");
     stopSpeech();
     if (voiceState !== "IDLE" && voiceState !== "ERROR") handleEndVoiceCall();
@@ -1252,10 +1250,17 @@ export default function AicyroChatbot() {
     );
   }
 
+  // 🔥 TICKET 7: UI Tool Call Tracker (Webhook/Booking)
   async function generateAndSendWebhook(data, timeText) {
+    const txId = generateCorrelationId();
+    const startTime = Date.now();
     let emailSubject = "Your Demo is Confirmed!";
     let emailBody = `Hi ${data.name || "there"},\n\nYour meeting is confirmed for ${timeText}. We look forward to speaking with you!\n\nBest,\nThe Team`;
-    const txId = generateCorrelationId();
+
+    uiLogger.info("ai_tool", "tool_call_started", {
+      context: { tool_name: "create_booking_and_email", tool_call_id: txId },
+      metadata: { args: { data, timeText } },
+    });
 
     try {
       const response = await fetchWithTrace(
@@ -1275,8 +1280,28 @@ export default function AicyroChatbot() {
         const generatedEmail = await response.json();
         emailSubject = generatedEmail.subject || emailSubject;
         emailBody = generatedEmail.body || emailBody;
+
+        uiLogger.info("ai_tool", "tool_call_success", {
+          context: {
+            tool_name: "create_booking_and_email",
+            tool_call_id: txId,
+            result_status: "success",
+          },
+          duration_ms: Date.now() - startTime,
+        });
+      } else {
+        throw new Error(`API returned status ${response.status}`);
       }
     } catch (error) {
+      uiLogger.error("ai_tool", "tool_call_failed", {
+        error,
+        context: {
+          tool_name: "create_booking_and_email",
+          tool_call_id: txId,
+          result_status: "failed",
+        },
+        duration_ms: Date.now() - startTime,
+      });
       uiLogger.warn("email_generation", "ai_fallback", { error });
     }
 
@@ -1307,8 +1332,16 @@ export default function AicyroChatbot() {
     );
   }
 
+  // 🔥 TICKET 7: UI Tool Call Tracker (Lead Submission)
   async function submitLead(data) {
     const txId = generateCorrelationId();
+    const startTime = Date.now();
+
+    uiLogger.info("ai_tool", "tool_call_started", {
+      context: { tool_name: "submit_lead", tool_call_id: txId },
+      metadata: { args: data },
+    });
+
     try {
       const currentTranscript = messagesRef.current
         .map(
@@ -1347,7 +1380,25 @@ export default function AicyroChatbot() {
         txId,
       );
       if (!res.ok) throw new Error(`Server status: ${res.status}`);
+
+      uiLogger.info("ai_tool", "tool_call_success", {
+        context: {
+          tool_name: "submit_lead",
+          tool_call_id: txId,
+          result_status: "success",
+        },
+        duration_ms: Date.now() - startTime,
+      });
     } catch (err) {
+      uiLogger.error("ai_tool", "tool_call_failed", {
+        error: err,
+        context: {
+          tool_name: "submit_lead",
+          tool_call_id: txId,
+          result_status: "failed",
+        },
+        duration_ms: Date.now() - startTime,
+      });
       uiLogger.error("lead_capture", "submission_failed", {
         error: err,
         correlation: { correlation_id: txId },
@@ -1367,7 +1418,6 @@ export default function AicyroChatbot() {
     if (!hasTrackedConvo) {
       trackConversationStarted(val);
       setHasTrackedConvo(true);
-      // 🚨 TICKET 3: chat_started
       uiLogger.info("user_action", "chat_started", {
         context: { message: "First message sent by user" },
       });
@@ -1620,7 +1670,6 @@ export default function AicyroChatbot() {
     });
     if (value.startsWith("shortcut_")) {
       handleTextInput({ preventDefault: () => {} }, label);
-
       return;
     }
 
@@ -1628,7 +1677,6 @@ export default function AicyroChatbot() {
     switch (step) {
       case STEPS.CHOOSE_PATH:
         if (value === "path_book") {
-          // 🚨 TICKET 3: consultation_requested
           uiLogger.info("lead_capture", "consultation_requested");
           setStep(STEPS.SELECT_DATE);
           addBotMessage(
@@ -1636,12 +1684,10 @@ export default function AicyroChatbot() {
             getNextWeekdays().map((d) => ({ label: d, value: `date_${d}` })),
           );
         } else if (value === "path_demo") {
-          // 🚨 TICKET 3: demo_requested
           uiLogger.info("lead_capture", "demo_requested");
           showMiniDemo(leadData.business_type || "Other");
         }
         break;
-
       case STEPS.SELECT_DATE:
         if (value.startsWith("date_")) {
           const chosenDate = value.replace("date_", "");
@@ -1729,12 +1775,11 @@ export default function AicyroChatbot() {
     const val = shortcutValue || inputValue.trim();
     if (!val) return;
 
-    // 🚨 TICKET 3: message_submitted
     uiLogger.info("user_action", "message_submitted", {
       context: { message: "Text input submitted" },
     });
-
     setInputValue("");
+
     if (
       agentMode === "voice" &&
       voiceCallRef.current?.dc &&
@@ -1778,39 +1823,15 @@ export default function AicyroChatbot() {
         .thought-dot-2 { animation: thought-pulse 1.5s infinite ease-in-out 0.3s; }
         .thought-dot-3 { animation: thought-pulse 1.5s infinite ease-in-out 0.6s; }
 
-        @keyframes v-listen {
-          0% { box-shadow: 0 0 0 0px rgba(16, 185, 129, 0.4); }
-          70% { box-shadow: 0 0 0 20px rgba(16, 185, 129, 0); }
-          100% { box-shadow: 0 0 0 0px rgba(16, 185, 129, 0); }
-        }
-        .anim-v-listen {
-          border: 2px solid #10b981;
-          animation: v-listen 2s infinite;
-        }
+        @keyframes v-listen { 0% { box-shadow: 0 0 0 0px rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 20px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0px rgba(16, 185, 129, 0); } }
+        .anim-v-listen { border: 2px solid #10b981; animation: v-listen 2s infinite; }
 
-        @keyframes v-process {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        .anim-v-process {
-          border: 3px dashed var(--accent-blue);
-          border-right-color: transparent;
-          animation: v-process 1.5s linear infinite;
-        }
+        @keyframes v-process { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .anim-v-process { border: 3px dashed var(--accent-blue); border-right-color: transparent; animation: v-process 1.5s linear infinite; }
 
-        @keyframes v-speak {
-          0% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.2); opacity: 0.5; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        .anim-v-speak-1 {
-          border: 2px solid var(--primary);
-          animation: v-speak 1.2s ease-in-out infinite;
-        }
-        .anim-v-speak-2 {
-          border: 2px solid var(--primary);
-          animation: v-speak 1.2s ease-in-out infinite 0.3s;
-        }
+        @keyframes v-speak { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.5; } 100% { transform: scale(1); opacity: 1; } }
+        .anim-v-speak-1 { border: 2px solid var(--primary); animation: v-speak 1.2s ease-in-out infinite; }
+        .anim-v-speak-2 { border: 2px solid var(--primary); animation: v-speak 1.2s ease-in-out infinite 0.3s; }
       `}</style>
 
       {showPeek && !isOpen && (
@@ -1821,13 +1842,13 @@ export default function AicyroChatbot() {
             </p>
             <div className="flex justify-center gap-3">
               <button
-                className="text-xs font-bold px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white transition-transform hover:-translate-y-0.5 shadow-[0_0_15px_var(--lead-glow)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--primary)] outline-none"
+                className="text-xs font-bold px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white transition-transform hover:-translate-y-0.5 shadow-[0_0_15px_var(--lead-glow)] outline-none"
                 onClick={openChat}
               >
                 Show me
               </button>
               <button
-                className="text-xs font-bold px-5 py-2.5 rounded-xl text-[var(--foreground-muted)] border border-transparent hover:border-[var(--border-color)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--primary)] outline-none"
+                className="text-xs font-bold px-5 py-2.5 rounded-xl text-[var(--foreground-muted)] border border-transparent hover:border-[var(--border-color)] outline-none"
                 onClick={() => setShowPeek(false)}
               >
                 Not now
@@ -1855,7 +1876,7 @@ export default function AicyroChatbot() {
             />
           </div>
           <button
-            className={`relative z-10 flex items-center justify-center text-white shadow-[0_4px_20px_var(--lead-glow)] transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_8px_30px_var(--lead-glow)] h-14 px-6 rounded-full rotate-0 bg-[var(--primary)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white outline-none`}
+            className={`relative z-10 flex items-center justify-center text-white shadow-[0_4px_20px_var(--lead-glow)] transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_8px_30px_var(--lead-glow)] h-14 px-6 rounded-full rotate-0 bg-[var(--primary)] outline-none`}
             onClick={openChat}
             aria-label="Open Chat"
           >
@@ -1907,13 +1928,11 @@ export default function AicyroChatbot() {
           </div>
 
           <div className="relative z-10 w-full h-[100dvh] sm:h-[620px] sm:max-h-[85vh] bg-[var(--background)] sm:border border-[var(--border-color)] sm:rounded-[24px] shadow-none sm:shadow-[0_20px_60px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden">
-            {/* Header Component */}
             <div className="px-4 py-3 sm:py-4 flex items-center justify-between shrink-0 bg-[var(--card-bg)] border-b border-[var(--border-color)] pt-[max(env(safe-area-inset-top),16px)] sm:pt-4 z-20">
               <div className="flex items-center gap-3 overflow-hidden">
                 <button
                   onClick={handleCloseChat}
-                  className="group w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-all duration-200 hover:scale-110 focus-visible:ring-2 focus-visible:ring-[var(--primary)] outline-none rounded-full shrink-0"
-                  aria-label="Minimize Chat"
+                  className="group w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-all duration-200 hover:scale-110 outline-none rounded-full shrink-0"
                 >
                   <svg
                     className="w-4 h-4 sm:w-5 sm:h-5 transition-all duration-200 group-hover:stroke-[3.5px]"
@@ -1954,22 +1973,15 @@ export default function AicyroChatbot() {
                     if (!isMuted) stopSpeech();
                     setIsMuted(!isMuted);
                   }}
-                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-[var(--foreground-muted)] hover:text-[var(--foreground)] bg-[var(--background)] rounded-full ring-1 ring-[var(--border-color)] transition-colors focus-visible:ring-2 focus-visible:ring-[var(--primary)] outline-none"
-                  aria-label={isMuted ? "Unmute Bot Voice" : "Mute Bot Voice"}
+                  className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-[var(--foreground-muted)] hover:text-[var(--foreground)] bg-[var(--background)] rounded-full ring-1 ring-[var(--border-color)] transition-colors outline-none"
                   title={isMuted ? "Unmute Bot Voice" : "Mute Bot Voice"}
                 >
                   {isMuted ? "🔇" : "🔊"}
                 </button>
-
                 {botConfig.voiceEnabled && (
                   <button
                     onClick={handleToggleMode}
-                    className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-white bg-[var(--primary)] rounded-full shadow-md transition-all hover:scale-105 hover:shadow-[0_0_15px_var(--lead-glow)] focus-visible:ring-2 focus-visible:ring-white outline-none"
-                    aria-label={
-                      agentMode === "text"
-                        ? "Switch to Voice Call"
-                        : "Switch to Text Chat"
-                    }
+                    className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-white bg-[var(--primary)] rounded-full shadow-md transition-all hover:scale-105 outline-none"
                     title={
                       agentMode === "text" ? "Switch to Call" : "Switch to Text"
                     }
@@ -1981,7 +1993,6 @@ export default function AicyroChatbot() {
                         stroke="currentColor"
                         strokeWidth="2.5"
                         viewBox="0 0 24 24"
-                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -1996,7 +2007,6 @@ export default function AicyroChatbot() {
                         stroke="currentColor"
                         strokeWidth="2.5"
                         viewBox="0 0 24 24"
-                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -2010,24 +2020,21 @@ export default function AicyroChatbot() {
               </div>
             </div>
 
-            {/* Microphone Permission Banner */}
             {voiceState === "PERMISSION_DENIED" && (
               <div
                 role="alert"
-                aria-live="assertive"
                 className="w-full bg-[var(--primary)] text-[var(--card-bg)] px-4 py-3 text-[13px] flex justify-between items-center shadow-sm shrink-0 z-20"
               >
                 <span className="font-bold">Microphone access denied.</span>
                 <button
                   onClick={handleStartVoiceCall}
-                  className="bg-[var(--card-bg)] text-[var(--primary)] px-3 py-1.5 rounded-lg font-bold text-xs hover:scale-105 transition-transform focus-visible:ring-2 focus-visible:ring-white outline-none"
+                  className="bg-[var(--card-bg)] text-[var(--primary)] px-3 py-1.5 rounded-lg font-bold text-xs hover:scale-105 outline-none"
                 >
                   Request Again
                 </button>
               </div>
             )}
 
-            {/* Main Content Area (Text or Voice View) */}
             <div className="flex-1 overflow-y-auto overscroll-contain acy-scroll relative">
               {agentMode === "text" ? (
                 <div className="px-4 py-5 flex flex-col gap-5 bg-[var(--background)] min-h-full">
@@ -2131,7 +2138,6 @@ export default function AicyroChatbot() {
                       alt="Voice Agent"
                       className="w-24 h-24 object-contain z-10 drop-shadow-md"
                     />
-
                     {voiceState === "LISTENING" && (
                       <div className="absolute inset-0 rounded-full anim-v-listen"></div>
                     )}
@@ -2151,7 +2157,6 @@ export default function AicyroChatbot() {
                       <div className="absolute inset-0 rounded-full border-4 border-red-500 opacity-60"></div>
                     )}
                   </div>
-
                   <h3
                     className="text-xl font-bold text-[var(--foreground)] mb-2 text-center"
                     aria-live="polite"
@@ -2166,7 +2171,6 @@ export default function AicyroChatbot() {
                     {voiceState === "INTERRUPTED" && "Listening..."}
                     {voiceState === "ERROR" && "Connection Lost"}
                   </h3>
-
                   <p className="text-[13px] text-[var(--foreground-muted)] text-center mb-10 max-w-[250px]">
                     {voiceState === "IDLE"
                       ? "Tap below to start a live voice conversation with our Close Desk."
@@ -2176,20 +2180,17 @@ export default function AicyroChatbot() {
                           ? "The secure backend connection was dropped. Please try again or continue using text below."
                           : "Speak naturally. You can also use the text box below anytime."}
                   </p>
-
                   {voiceState === "ERROR" && (
                     <button
                       onClick={handleStartVoiceCall}
-                      className="bg-red-500 text-white px-8 py-3.5 rounded-full font-bold shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:scale-105 transition-transform flex items-center gap-2.5 focus-visible:ring-2 focus-visible:ring-white outline-none"
-                      aria-label="Reconnect voice call"
+                      className="bg-red-500 text-white px-8 py-3.5 rounded-full font-bold shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:scale-105 outline-none"
                     >
                       <svg
-                        className="w-5 h-5"
+                        className="w-5 h-5 inline-block mr-2"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
                         strokeWidth="2.5"
-                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -2200,21 +2201,18 @@ export default function AicyroChatbot() {
                       Reconnect
                     </button>
                   )}
-
                   {(voiceState === "IDLE" ||
                     voiceState === "PERMISSION_DENIED") && (
                     <button
                       onClick={handleStartVoiceCall}
-                      className="bg-[var(--primary)] text-white px-8 py-3.5 rounded-full font-bold shadow-[0_0_20px_var(--lead-glow)] hover:scale-105 transition-transform flex items-center gap-2.5 focus-visible:ring-2 focus-visible:ring-white outline-none"
-                      aria-label="Start voice call"
+                      className="bg-[var(--primary)] text-white px-8 py-3.5 rounded-full font-bold shadow-[0_0_20px_var(--lead-glow)] hover:scale-105 outline-none"
                     >
                       <svg
-                        className="w-5 h-5"
+                        className="w-5 h-5 inline-block mr-2"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
                         strokeWidth="2.5"
-                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -2225,7 +2223,6 @@ export default function AicyroChatbot() {
                       Start Voice Call
                     </button>
                   )}
-
                   {[
                     "LISTENING",
                     "PROCESSING",
@@ -2235,16 +2232,14 @@ export default function AicyroChatbot() {
                   ].includes(voiceState) && (
                     <button
                       onClick={handleEndVoiceCall}
-                      className="bg-red-500 text-white px-8 py-3.5 rounded-full font-bold shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:scale-105 transition-transform flex items-center gap-2.5 focus-visible:ring-2 focus-visible:ring-white outline-none"
-                      aria-label="End voice call"
+                      className="bg-red-500 text-white px-8 py-3.5 rounded-full font-bold shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:scale-105 outline-none"
                     >
                       <svg
-                        className="w-5 h-5"
+                        className="w-5 h-5 inline-block mr-2"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
                         strokeWidth="2.5"
-                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -2255,7 +2250,6 @@ export default function AicyroChatbot() {
                       End Call
                     </button>
                   )}
-
                   <div className="w-full text-center mt-auto flex items-center justify-center gap-1.5 opacity-60">
                     <span className="text-[11px] font-bold text-[var(--foreground-muted)] uppercase tracking-widest">
                       Powered by Aicyro
@@ -2265,7 +2259,6 @@ export default function AicyroChatbot() {
               )}
             </div>
 
-            {/* Permanent Bottom Text Input - Active in both Text and Voice modes */}
             <div className="p-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] sm:pb-3 bg-[var(--background)] border-t border-[var(--border-color)] shrink-0 z-20">
               {[STEPS.AI_CHAT_MODE].includes(step) ? (
                 <form
@@ -2275,10 +2268,7 @@ export default function AicyroChatbot() {
                   <button
                     type="button"
                     onClick={toggleListening}
-                    className={`p-1.5 rounded-full transition-all focus-visible:ring-2 focus-visible:ring-[var(--primary)] outline-none ${isListening ? "bg-red-500 text-white animate-pulse" : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`}
-                    aria-label={
-                      isListening ? "Stop listening" : "Speak to type"
-                    }
+                    className={`p-1.5 rounded-full transition-all outline-none ${isListening ? "bg-red-500 text-white animate-pulse" : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`}
                     title={isListening ? "Stop listening" : "Speak to type"}
                   >
                     <svg
@@ -2287,7 +2277,6 @@ export default function AicyroChatbot() {
                       stroke="currentColor"
                       strokeWidth="2"
                       viewBox="0 0 24 24"
-                      aria-hidden="true"
                     >
                       <path
                         strokeLinecap="round"
@@ -2307,7 +2296,6 @@ export default function AicyroChatbot() {
                     placeholder={
                       isListening ? "Listening..." : "Type or speak..."
                     }
-                    aria-label="Chat input"
                   />
                   <button
                     type="submit"
@@ -2315,8 +2303,7 @@ export default function AicyroChatbot() {
                       !inputValue.trim() ||
                       (agentMode === "text" && isProcessing)
                     }
-                    className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--primary)] text-white transition-all disabled:opacity-50 disabled:scale-100 hover:scale-105 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[var(--primary)] outline-none"
-                    aria-label="Send message"
+                    className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--primary)] text-white transition-all disabled:opacity-50 disabled:scale-100 hover:scale-105 outline-none"
                   >
                     <svg
                       className="w-4 h-4 ml-0.5"
@@ -2324,7 +2311,6 @@ export default function AicyroChatbot() {
                       viewBox="0 0 24 24"
                       stroke="currentColor"
                       strokeWidth="2.5"
-                      aria-hidden="true"
                     >
                       <path
                         strokeLinecap="round"
@@ -2340,7 +2326,6 @@ export default function AicyroChatbot() {
                     className="w-3.5 h-3.5 text-[var(--foreground-muted)]"
                     fill="currentColor"
                     viewBox="0 0 24 24"
-                    aria-hidden="true"
                   >
                     <path d="M12 2L2 22h20L12 2zm0 4.5l6.5 13.5h-13L12 6.5z" />
                   </svg>
