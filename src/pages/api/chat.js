@@ -217,35 +217,41 @@ async function handler(req, res, apiLogger) {
     };
 
     // --- LLM & SCHEMA EXECUTION BLOCK ---
-    while (retries > 0) {
-      try {
-        // 🔥 TICKET 5: Wrap the execution promise
-        const llmPromise = openai.chat.completions.create({
-          model: aiContext.ai_model,
-          response_format: { type: "json_object" },
-          messages: [{ role: "system", content: instructions }, ...messages],
-          temperature: parseFloat(botConfig.temperature ?? 0.4),
-          max_tokens: 500,
-        });
+   // 🔥 TICKET 12: Import this at the very top of chat.js
+    // import { withRetryTrace } from "../../lib/retryTracer";
 
-        // 🔥 TICKET 5: Use the Tracer to securely execute and log the LLM call
-        const completion = await traceAiExecution(apiLogger, llmPromise, aiContext);
-        
-        const rawContent = completion.choices[0].message.content;
-        
-        // 🔥 TICKET 5: Use the safe parser to catch JSON hallucinations and log them
-        const aiResponse = safeParseAiResponse(apiLogger, rawContent, aiContext);
-        
-        validatedData = validateAndSanitizePayload(aiResponse);
-        break;
-      } catch (err) {
-        lastModelError = err;
-        errorCategory = err instanceof SyntaxError ? "schema_failure" : "model_failure";
-        apiLogger.warn("ai_lifecycle", "ai_retry_triggered", { 
-          context: { message: `LLM/Parse failed. Retries left: ${retries - 1}` }, error: err 
-        });
-        retries--;
-      }
+    // --- LLM & SCHEMA EXECUTION BLOCK ---
+    let validatedData;
+    
+    try {
+      // Wraps the LLM Call + JSON Parsing + Schema Validation in a traced retry loop
+      validatedData = await withRetryTrace(
+        apiLogger, 
+        "LLM_Execution_And_Parsing", 
+        { maxAttempts: 2, delayMs: 1000 }, 
+        async (attempt) => {
+          
+          const llmPromise = openai.chat.completions.create({
+            model: aiContext.ai_model,
+            response_format: { type: "json_object" },
+            messages: [{ role: "system", content: instructions }, ...messages],
+            temperature: parseFloat(botConfig.temperature ?? 0.4),
+            max_tokens: 500,
+          });
+
+          // Triggers Ticket 5 (AI Trace) inside Ticket 12 (Retry Trace)
+          const completion = await traceAiExecution(apiLogger, llmPromise, aiContext);
+          const rawContent = completion.choices[0].message.content;
+          const aiResponse = safeParseAiResponse(apiLogger, rawContent, aiContext);
+          
+          return validateAndSanitizePayload(aiResponse);
+        }
+      );
+    } catch (err) {
+      // The retry tracer has already logged the CRITICAL final failure.
+      // We just assign the error category so the fallback UI knows what to tell the user.
+      errorCategory = err instanceof SyntaxError ? "schema_failure" : "model_failure";
+      throw err; 
     }
 
     if (!validatedData) {
