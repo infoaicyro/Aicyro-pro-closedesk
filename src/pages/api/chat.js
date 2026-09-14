@@ -41,32 +41,16 @@ function validateAndSanitizePayload(aiResponse) {
   const safePhone = rawPhone && isValidPhone(rawPhone) ? rawPhone : null;
 
   const rawWebsite = typeof biz.website === "string" ? biz.website : null;
-  const safeWebsite =
-    rawWebsite && isValidWebsite(rawWebsite) ? rawWebsite : null;
+  const safeWebsite = rawWebsite && isValidWebsite(rawWebsite) ? rawWebsite : null;
 
-  const validTemperatures = [
-    "HIGH",
-    "MEDIUM",
-    "EDUCATIONAL_LOW_INTENT",
-    "UNKNOWN",
-  ];
+  const validTemperatures = ["HIGH", "MEDIUM", "EDUCATIONAL_LOW_INTENT", "UNKNOWN"];
 
   return {
-    reply:
-      typeof aiResponse.reply === "string"
-        ? aiResponse.reply
-        : "I'm sorry, I encountered a brief error. How can I help you today?",
-    suggested_shortcuts: Array.isArray(aiResponse.suggested_shortcuts)
-      ? aiResponse.suggested_shortcuts
-      : [],
+    reply: typeof aiResponse.reply === "string" ? aiResponse.reply : "I'm sorry, I encountered a brief error. How can I help you today?",
+    suggested_shortcuts: Array.isArray(aiResponse.suggested_shortcuts) ? aiResponse.suggested_shortcuts : [],
     state: typeof aiResponse.state === "string" ? aiResponse.state : "UNKNOWN",
-    intent_object: Array.isArray(aiResponse.intent_object)
-      ? aiResponse.intent_object
-      : [],
-    urgency_level:
-      typeof aiResponse.urgency_level === "string"
-        ? aiResponse.urgency_level
-        : "Low",
+    intent_object: Array.isArray(aiResponse.intent_object) ? aiResponse.intent_object : [],
+    urgency_level: typeof aiResponse.urgency_level === "string" ? aiResponse.urgency_level : "Low",
     context_patch: {
       contact_info: {
         name: typeof contact.name === "string" ? contact.name : null,
@@ -75,74 +59,30 @@ function validateAndSanitizePayload(aiResponse) {
       },
       business_context: {
         industry: typeof biz.industry === "string" ? biz.industry : null,
-        business_problem:
-          typeof biz.business_problem === "string"
-            ? biz.business_problem
-            : null,
-        current_process:
-          typeof biz.current_process === "string" ? biz.current_process : null,
-        desired_outcome:
-          typeof biz.desired_outcome === "string" ? biz.desired_outcome : null,
-        interested_capability:
-          typeof biz.interested_capability === "string"
-            ? biz.interested_capability
-            : null,
-        current_software:
-          typeof biz.current_software === "string"
-            ? biz.current_software
-            : null,
+        business_problem: typeof biz.business_problem === "string" ? biz.business_problem : null,
+        current_process: typeof biz.current_process === "string" ? biz.current_process : null,
+        desired_outcome: typeof biz.desired_outcome === "string" ? biz.desired_outcome : null,
+        interested_capability: typeof biz.interested_capability === "string" ? biz.interested_capability : null,
+        current_software: typeof biz.current_software === "string" ? biz.current_software : null,
         website: safeWebsite,
       },
       booking_request: {
-        request_type:
-          typeof booking.request_type === "string"
-            ? booking.request_type
-            : null,
-        preferred_date:
-          typeof booking.preferred_date === "string"
-            ? booking.preferred_date
-            : null,
-        preferred_time:
-          typeof booking.preferred_time === "string"
-            ? booking.preferred_time
-            : null,
+        request_type: typeof booking.request_type === "string" ? booking.request_type : null,
+        preferred_date: typeof booking.preferred_date === "string" ? booking.preferred_date : null,
+        preferred_time: typeof booking.preferred_time === "string" ? booking.preferred_time : null,
       },
     },
-    privacy_patch: Array.isArray(aiResponse.privacy_patch)
-      ? aiResponse.privacy_patch
-      : [],
-    next_action:
-      typeof aiResponse.next_action === "string"
-        ? aiResponse.next_action
-        : "NONE",
+    privacy_patch: Array.isArray(aiResponse.privacy_patch) ? aiResponse.privacy_patch : [],
+    next_action: typeof aiResponse.next_action === "string" ? aiResponse.next_action : "NONE",
     flags: Array.isArray(aiResponse.flags) ? aiResponse.flags : [],
-    analytics_events: Array.isArray(aiResponse.analytics_events)
-      ? aiResponse.analytics_events
-      : [],
-    lead_temperature: validTemperatures.includes(aiResponse.lead_temperature)
-      ? aiResponse.lead_temperature
-      : "UNKNOWN",
-    lead_temperature_reason:
-      typeof aiResponse.lead_temperature_reason === "string"
-        ? aiResponse.lead_temperature_reason
-        : null,
-    factual_summary:
-      typeof aiResponse.factual_summary === "string"
-        ? aiResponse.factual_summary
-        : null,
+    analytics_events: Array.isArray(aiResponse.analytics_events) ? aiResponse.analytics_events : [],
+    lead_temperature: validTemperatures.includes(aiResponse.lead_temperature) ? aiResponse.lead_temperature : "UNKNOWN",
+    lead_temperature_reason: typeof aiResponse.lead_temperature_reason === "string" ? aiResponse.lead_temperature_reason : null,
+    factual_summary: typeof aiResponse.factual_summary === "string" ? aiResponse.factual_summary : null,
   };
 }
 
-async function logAnalyticsEvent(
-  session_id,
-  channel,
-  state,
-  temperature,
-  intents,
-  events,
-  versions,
-  error_msg = null,
-) {
+async function logAnalyticsEvent(session_id, channel, state, temperature, intents, events, versions, error_msg = null) {
   try {
     const logPayload = {
       session_id,
@@ -162,17 +102,12 @@ async function logAnalyticsEvent(
 }
 
 async function handler(req, res, apiLogger) {
-  if (req.method !== "POST")
-    return res.status(405).json({ reply: "Method not allowed." });
+  if (req.method !== "POST") return res.status(405).json({ reply: "Method not allowed." });
 
   let sessionIdForErrorLog = "unknown";
   let channelForErrorLog = "web_widget";
   let errorCategory = "general_backend_failure";
-  let sessionVersions = {
-    policy: POLICY_VERSION,
-    config_snapshot: "unknown",
-    knowledge: "unknown",
-  };
+  let sessionVersions = { policy: POLICY_VERSION, config_snapshot: "unknown", knowledge: "unknown" };
 
   try {
     const {
@@ -186,19 +121,14 @@ async function handler(req, res, apiLogger) {
     if (session_id) sessionIdForErrorLog = session_id;
     if (channel) channelForErrorLog = channel;
 
-    if (!session_id)
-      return res.status(400).json({ reply: "Session ID required." });
-    if (!messages || !Array.isArray(messages))
-      return res.status(400).json({ reply: "Conversation history required." });
+    if (!session_id) return res.status(400).json({ reply: "Session ID required." });
+    if (!messages || !Array.isArray(messages)) return res.status(400).json({ reply: "Conversation history required." });
 
     const isFirstMessage = messages.length === 1;
 
     // --- SECURITY: Rate Limiting Check ---
     const now = Date.now();
-    const userRateData = rateLimitMap.get(session_id) || {
-      count: 0,
-      firstRequest: now,
-    };
+    const userRateData = rateLimitMap.get(session_id) || { count: 0, firstRequest: now };
     if (now - userRateData.firstRequest > RATE_LIMIT_WINDOW_MS) {
       userRateData.count = 1;
       userRateData.firstRequest = now;
@@ -206,42 +136,21 @@ async function handler(req, res, apiLogger) {
       userRateData.count++;
       if (userRateData.count > MAX_REQUESTS_PER_WINDOW) {
         // Structured Logging Update
-        apiLogger.warn("security_audit", "rate_limit_exceeded", {
-          context: {
-            session_id,
-            message: "User sending messages too quickly.",
-          },
-        });
-        await logAnalyticsEvent(
-          session_id,
-          channel,
-          "RATE_LIMITED",
-          "UNKNOWN",
-          [],
-          ["error_rate_limit"],
-          sessionVersions,
-        );
-        return res.status(429).json({
-          reply: "You're sending messages too quickly. Please wait a moment.",
-        });
+        apiLogger.warn("security_audit", "rate_limit_exceeded", { context: { session_id, message: "User sending messages too quickly." }});
+        await logAnalyticsEvent(session_id, channel, "RATE_LIMITED", "UNKNOWN", [], ["error_rate_limit"], sessionVersions);
+        return res.status(429).json({ reply: "You're sending messages too quickly. Please wait a moment." });
       }
     }
     rateLimitMap.set(session_id, userRateData);
 
     // --- SECURITY: Prompt Injection Detection ---
     const lastUserMessage = messages[messages.length - 1]?.content || "";
-    const injectionPattern =
-      /(ignore (all )?previous|system prompt|developer mode|jailbreak|bypass instructions)/i;
+    const injectionPattern = /(ignore (all )?previous|system prompt|developer mode|jailbreak|bypass instructions)/i;
     let injectionDetected = false;
 
     if (injectionPattern.test(lastUserMessage)) {
       // Structured Logging Update
-      apiLogger.warn("security_audit", "prompt_injection_detected", {
-        context: {
-          session_id,
-          message: "Potential prompt injection attempt blocked.",
-        },
-      });
+      apiLogger.warn("security_audit", "prompt_injection_detected", { context: { session_id, message: "Potential prompt injection attempt blocked." }});
       injectionDetected = true;
     }
 
@@ -259,10 +168,7 @@ async function handler(req, res, apiLogger) {
         existingProspect = prospectSnap.val() || {};
       }
     } catch (fbReadErr) {
-      apiLogger.warn("database", "firebase_read_failed", {
-        context: { message: "Failed to pre-fetch prospect state" },
-        error: fbReadErr,
-      });
+      apiLogger.warn("database", "firebase_read_failed", { context: { message: "Failed to pre-fetch prospect state" }, error: fbReadErr });
     }
 
     const serverContextPatch = existingProspect.context_patch || {};
@@ -276,39 +182,21 @@ async function handler(req, res, apiLogger) {
       email: current_lead_data.email || serverContact.email || "",
       phone: current_lead_data.phone || serverContact.phone || "",
       website: current_lead_data.website || serverBiz.website || "",
-      business_type:
-        current_lead_data.business_type || serverBiz.industry || "",
-      business_name:
-        current_lead_data.business_name || serverBiz.industry || "",
-      service_requested:
-        current_lead_data.service_requested ||
-        serverBiz.interested_capability ||
-        "",
-      preferred_date:
-        current_lead_data.preferred_date || serverBooking.preferred_date || "",
-      preferred_time:
-        current_lead_data.preferred_time || serverBooking.preferred_time || "",
-      declined_fields: Array.from(
-        new Set([
-          ...(current_lead_data.declined_fields || []),
-          ...(existingProspect.privacy_patch || []),
-        ]),
-      ),
+      business_type: current_lead_data.business_type || serverBiz.industry || "",
+      business_name: current_lead_data.business_name || serverBiz.industry || "",
+      service_requested: current_lead_data.service_requested || serverBiz.interested_capability || "",
+      preferred_date: current_lead_data.preferred_date || serverBooking.preferred_date || "",
+      preferred_time: current_lead_data.preferred_time || serverBooking.preferred_time || "",
+      declined_fields: Array.from(new Set([...(current_lead_data.declined_fields || []), ...(existingProspect.privacy_patch || [])])),
     };
 
     let instructions, botConfig;
     try {
-      const ruleBook = await getMasterRuleBook(
-        "text",
-        mergedLeadData,
-        retrievedKnowledge,
-      );
+      const ruleBook = await getMasterRuleBook("text", mergedLeadData, retrievedKnowledge);
       instructions = ruleBook.instructions;
       botConfig = ruleBook.botConfig;
       sessionVersions.config_snapshot = generateHash(JSON.stringify(botConfig));
-      sessionVersions.knowledge = retrievedKnowledge
-        ? generateHash(retrievedKnowledge)
-        : "none";
+      sessionVersions.knowledge = retrievedKnowledge ? generateHash(retrievedKnowledge) : "none";
     } catch (fbErr) {
       errorCategory = "firebase_config_failure";
       throw fbErr;
@@ -323,12 +211,8 @@ async function handler(req, res, apiLogger) {
     const aiContext = {
       ai_model: botConfig.aiModel || "gpt-4o-mini",
       prompt_version: sessionVersions.config_snapshot,
-      conversation_state:
-        existingProspect.state ||
-        (isFirstMessage ? "initial_greeting" : "in_progress"),
-      detected_intent: existingProspect.intent_object
-        ? existingProspect.intent_object[0]
-        : "general_chat",
+      conversation_state: existingProspect.state || (isFirstMessage ? "initial_greeting" : "in_progress"),
+      detected_intent: existingProspect.intent_object ? existingProspect.intent_object[0] : "general_chat",
       rag_used: !!retrievedKnowledge,
     };
 
@@ -345,32 +229,20 @@ async function handler(req, res, apiLogger) {
         });
 
         // 🔥 TICKET 5: Use the Tracer to securely execute and log the LLM call
-        const completion = await traceAiExecution(
-          apiLogger,
-          llmPromise,
-          aiContext,
-        );
-
+        const completion = await traceAiExecution(apiLogger, llmPromise, aiContext);
+        
         const rawContent = completion.choices[0].message.content;
-
+        
         // 🔥 TICKET 5: Use the safe parser to catch JSON hallucinations and log them
-        const aiResponse = safeParseAiResponse(
-          apiLogger,
-          rawContent,
-          aiContext,
-        );
-
+        const aiResponse = safeParseAiResponse(apiLogger, rawContent, aiContext);
+        
         validatedData = validateAndSanitizePayload(aiResponse);
         break;
       } catch (err) {
         lastModelError = err;
-        errorCategory =
-          err instanceof SyntaxError ? "schema_failure" : "model_failure";
-        apiLogger.warn("ai_lifecycle", "ai_retry_triggered", {
-          context: {
-            message: `LLM/Parse failed. Retries left: ${retries - 1}`,
-          },
-          error: err,
+        errorCategory = err instanceof SyntaxError ? "schema_failure" : "model_failure";
+        apiLogger.warn("ai_lifecycle", "ai_retry_triggered", { 
+          context: { message: `LLM/Parse failed. Retries left: ${retries - 1}` }, error: err 
         });
         retries--;
       }
@@ -380,67 +252,32 @@ async function handler(req, res, apiLogger) {
       throw lastModelError || new Error("Exhausted retries for LLM call.");
     }
 
-    if (
-      injectionDetected &&
-      !validatedData.intent_object.includes("Security Incident")
-    ) {
+    if (injectionDetected && !validatedData.intent_object.includes("Security Incident")) {
       validatedData.intent_object.push("Security Incident");
       validatedData.analytics_events.push("security_incident_detected");
     }
 
     const serverTimestamp = new Date().toISOString();
 
-    const finalContact = {
-      ...serverContact,
-      ...(validatedData.context_patch.contact_info || {}),
-    };
-    const finalBiz = {
-      ...serverBiz,
-      ...(validatedData.context_patch.business_context || {}),
-    };
-    const finalBooking = {
-      ...serverBooking,
-      ...(validatedData.context_patch.booking_request || {}),
-    };
-    const finalPrivacyPatch = Array.from(
-      new Set([
-        ...(existingProspect.privacy_patch || []),
-        ...(validatedData.privacy_patch || []),
-      ]),
-    );
-    const finalFlags = Array.from(
-      new Set([
-        ...(existingProspect.flags || []),
-        ...(validatedData.flags || []),
-      ]),
-    );
+    const finalContact = { ...serverContact, ...(validatedData.context_patch.contact_info || {}) };
+    const finalBiz = { ...serverBiz, ...(validatedData.context_patch.business_context || {}) };
+    const finalBooking = { ...serverBooking, ...(validatedData.context_patch.booking_request || {}) };
+    const finalPrivacyPatch = Array.from(new Set([...(existingProspect.privacy_patch || []), ...(validatedData.privacy_patch || [])]));
+    const finalFlags = Array.from(new Set([...(existingProspect.flags || []), ...(validatedData.flags || [])]));
 
     const backendPayload = {
-      session_id,
-      channel,
-      last_updated: serverTimestamp,
-      versions: sessionVersions,
+      session_id, channel, last_updated: serverTimestamp, versions: sessionVersions,
       transcript_reference: `transcripts/${session_id}`,
       intent_object: validatedData.intent_object,
       lead_temperature: validatedData.lead_temperature,
       lead_temperature_reason: validatedData.lead_temperature_reason,
       urgency_level: validatedData.urgency_level,
       state: validatedData.state,
-      next_action:
-        validatedData.next_action !== "NONE"
-          ? validatedData.next_action
-          : existingProspect.next_action || "NONE",
+      next_action: validatedData.next_action !== "NONE" ? validatedData.next_action : (existingProspect.next_action || "NONE"),
       flags: finalFlags,
       suggested_shortcuts: validatedData.suggested_shortcuts,
-      factual_summary:
-        validatedData.factual_summary ||
-        existingProspect.factual_summary ||
-        null,
-      context_patch: {
-        contact_info: finalContact,
-        business_context: finalBiz,
-        booking_request: finalBooking,
-      },
+      factual_summary: validatedData.factual_summary || existingProspect.factual_summary || null,
+      context_patch: { contact_info: finalContact, business_context: finalBiz, booking_request: finalBooking },
       privacy_patch: finalPrivacyPatch,
     };
 
@@ -449,42 +286,22 @@ async function handler(req, res, apiLogger) {
       if (backendPayload.flags.length > 0) {
         const actionRef = ref(db, `session_actions/${session_id}`);
         const existingActionsSnapshot = await get(actionRef);
-        const existingActions = existingActionsSnapshot.exists()
-          ? existingActionsSnapshot.val()
-          : {};
+        const existingActions = existingActionsSnapshot.exists() ? existingActionsSnapshot.val() : {};
 
-        const newActionsToProcess = backendPayload.flags.filter(
-          (flag) =>
-            !existingActions[flag] || existingActions[flag].status === "failed",
-        );
+        const newActionsToProcess = backendPayload.flags.filter((flag) => !existingActions[flag] || existingActions[flag].status === "failed");
 
         if (newActionsToProcess.length > 0) {
           let updates = {};
 
           for (const flag of newActionsToProcess) {
-            updates[flag] = {
-              triggered_at: serverTimestamp,
-              status: "pending",
-            };
+            updates[flag] = { triggered_at: serverTimestamp, status: "pending" };
 
             // --- SECURE TEXT ERASURE ---
             if (flag === "TRIGGER_DATA_DELETION") {
               const wipedContext = {
                 contact_info: { name: null, email: null, phone: null },
-                business_context: {
-                  industry: null,
-                  business_problem: null,
-                  current_process: null,
-                  desired_outcome: null,
-                  interested_capability: null,
-                  current_software: null,
-                  website: null,
-                },
-                booking_request: {
-                  request_type: null,
-                  preferred_date: null,
-                  preferred_time: null,
-                },
+                business_context: { industry: null, business_problem: null, current_process: null, desired_outcome: null, interested_capability: null, current_software: null, website: null },
+                booking_request: { request_type: null, preferred_date: null, preferred_time: null },
               };
               backendPayload.context_patch = wipedContext;
               backendPayload.factual_summary = null;
@@ -503,15 +320,7 @@ async function handler(req, res, apiLogger) {
       if (isFirstMessage) finalEvents.push("conversation_started");
 
       if (finalEvents.length > 0) {
-        await logAnalyticsEvent(
-          session_id,
-          channel,
-          validatedData.state,
-          validatedData.lead_temperature,
-          validatedData.intent_object,
-          finalEvents,
-          sessionVersions,
-        );
+        await logAnalyticsEvent(session_id, channel, validatedData.state, validatedData.lead_temperature, validatedData.intent_object, finalEvents, sessionVersions);
       }
 
       await set(ref(db, `prospects/${session_id}`), backendPayload);
@@ -528,43 +337,21 @@ async function handler(req, res, apiLogger) {
     });
   } catch (error) {
     // Structured Logging Update
-    apiLogger.error("system_event", "chatbot_engine_failure", {
-      error,
-      context: { errorCategory },
-    });
+    apiLogger.error("system_event", "chatbot_engine_failure", { error, context: { errorCategory } });
 
-    logAnalyticsEvent(
-      sessionIdForErrorLog,
-      channelForErrorLog,
-      "ERROR_STATE",
-      "UNKNOWN",
-      [],
-      [errorCategory],
-      sessionVersions,
-      error.message,
-    ).catch(apiLogger.error);
+    logAnalyticsEvent(sessionIdForErrorLog, channelForErrorLog, "ERROR_STATE", "UNKNOWN", [], [errorCategory], sessionVersions, error.message).catch(apiLogger.error);
 
-    let fallbackReply =
-      "I experienced a brief network delay. Could you please try sending that again?";
+    let fallbackReply = "I experienced a brief network delay. Could you please try sending that again?";
     if (errorCategory === "firebase_action_failure") {
-      fallbackReply =
-        "I had trouble saving your last request due to a database delay. Could you please confirm that one more time?";
+      fallbackReply = "I had trouble saving your last request due to a database delay. Could you please confirm that one more time?";
     } else if (errorCategory === "schema_failure") {
-      fallbackReply =
-        "My system had a minor processing hiccup. Could you rephrase that slightly?";
+      fallbackReply = "My system had a minor processing hiccup. Could you rephrase that slightly?";
     }
 
     return res.status(200).json({
-      reply: fallbackReply,
-      suggested_shortcuts: [],
-      context_patch: req.body?.current_lead_data || {},
-      privacy_patch: [],
-      intent_object: ["UNKNOWN"],
-      lead_temperature: "UNKNOWN",
-      flags: [],
-      analytics_events: ["error_recovery"],
-      state: "RECOVERY",
-      next_action: "NONE",
+      reply: fallbackReply, suggested_shortcuts: [], context_patch: req.body?.current_lead_data || {},
+      privacy_patch: [], intent_object: ["UNKNOWN"], lead_temperature: "UNKNOWN", flags: [],
+      analytics_events: ["error_recovery"], state: "RECOVERY", next_action: "NONE",
     });
   }
 }
