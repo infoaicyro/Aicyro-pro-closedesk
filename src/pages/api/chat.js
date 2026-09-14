@@ -5,8 +5,8 @@ import { ref, set, get, update, push } from "firebase/database";
 import { getMasterRuleBook, POLICY_VERSION } from "../../lib/ruleBook";
 import { withApiLogger } from "../../lib/apiMiddleware";
 
-// 🔥 TICKET 5: Import the AI Tracer tools
 import { traceAiExecution, safeParseAiResponse } from "../../lib/aiTracer";
+import { withRetryTrace } from "../../lib/retryTracer"; // 🔥 TICKET 12: Added Retry Tracer
 
 function generateHash(str) {
   let hash = 5381;
@@ -135,7 +135,6 @@ async function handler(req, res, apiLogger) {
     } else {
       userRateData.count++;
       if (userRateData.count > MAX_REQUESTS_PER_WINDOW) {
-        // Structured Logging Update
         apiLogger.warn("security_audit", "rate_limit_exceeded", { context: { session_id, message: "User sending messages too quickly." }});
         await logAnalyticsEvent(session_id, channel, "RATE_LIMITED", "UNKNOWN", [], ["error_rate_limit"], sessionVersions);
         return res.status(429).json({ reply: "You're sending messages too quickly. Please wait a moment." });
@@ -149,7 +148,6 @@ async function handler(req, res, apiLogger) {
     let injectionDetected = false;
 
     if (injectionPattern.test(lastUserMessage)) {
-      // Structured Logging Update
       apiLogger.warn("security_audit", "prompt_injection_detected", { context: { session_id, message: "Potential prompt injection attempt blocked." }});
       injectionDetected = true;
     }
@@ -203,11 +201,8 @@ async function handler(req, res, apiLogger) {
     }
 
     const openai = new OpenAI({ apiKey });
-    let validatedData = null;
-    let retries = 2;
-    let lastModelError = null;
+    let validatedData = null; // ONLY DECLARED ONCE
 
-    // 🔥 TICKET 5: Define the AI Context for Tracer Logging
     const aiContext = {
       ai_model: botConfig.aiModel || "gpt-4o-mini",
       prompt_version: sessionVersions.config_snapshot,
@@ -216,15 +211,9 @@ async function handler(req, res, apiLogger) {
       rag_used: !!retrievedKnowledge,
     };
 
-    // --- LLM & SCHEMA EXECUTION BLOCK ---
-   // 🔥 TICKET 12: Import this at the very top of chat.js
-    // import { withRetryTrace } from "../../lib/retryTracer";
-
-    // --- LLM & SCHEMA EXECUTION BLOCK ---
-    let validatedData;
-    
+    // --- LLM & SCHEMA EXECUTION BLOCK (TICKET 12) ---
     try {
-      // Wraps the LLM Call + JSON Parsing + Schema Validation in a traced retry loop
+      // Reassigning validatedData without 'let' to avoid the duplicate declaration error
       validatedData = await withRetryTrace(
         apiLogger, 
         "LLM_Execution_And_Parsing", 
@@ -248,14 +237,12 @@ async function handler(req, res, apiLogger) {
         }
       );
     } catch (err) {
-      // The retry tracer has already logged the CRITICAL final failure.
-      // We just assign the error category so the fallback UI knows what to tell the user.
       errorCategory = err instanceof SyntaxError ? "schema_failure" : "model_failure";
-      throw err; 
+      throw err; // Send to the outermost fallback catch block
     }
 
     if (!validatedData) {
-      throw lastModelError || new Error("Exhausted retries for LLM call.");
+      throw new Error("Exhausted retries for LLM call.");
     }
 
     if (injectionDetected && !validatedData.intent_object.includes("Security Incident")) {
@@ -342,7 +329,6 @@ async function handler(req, res, apiLogger) {
       next_action: backendPayload.next_action,
     });
   } catch (error) {
-    // Structured Logging Update
     apiLogger.error("system_event", "chatbot_engine_failure", { error, context: { errorCategory } });
 
     logAnalyticsEvent(sessionIdForErrorLog, channelForErrorLog, "ERROR_STATE", "UNKNOWN", [], [errorCategory], sessionVersions, error.message).catch(apiLogger.error);
