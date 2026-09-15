@@ -1,6 +1,12 @@
+// src/components/Dashboard/TerminalScreen.jsx
 "use client";
 
 import { useState, useEffect } from "react";
+
+// 🔥 TICKET 14: Included so the file is ready for "data_deleted" logging when a delete button is added
+import { createPulseLogger } from "../../../lib/loggerPresets";
+import { recordAuditTrail } from "../../../lib/auditTracer";
+const pulseLogger = createPulseLogger("TerminalScreen");
 
 export default function LeadScreen({ onLogout }) {
   const [leads, setLeads] = useState([]);
@@ -27,7 +33,6 @@ export default function LeadScreen({ onLogout }) {
       const data = await response.json();
 
       let visitorsObj = {};
-      // 1. Correctly target the 'visitors' object based on your Firebase JSON
       if (data.analytics && data.analytics.visitors) {
         visitorsObj = data.analytics.visitors;
       } else if (data.visitors) {
@@ -38,14 +43,12 @@ export default function LeadScreen({ onLogout }) {
 
       let leadsArray = [];
 
-      // 2. Map the nested Firebase structure safely
       if (visitorsObj && typeof visitorsObj === "object") {
         leadsArray = Object.keys(visitorsObj).map((key) => {
           const visitor = visitorsObj[key];
           const profile = visitor.profile || {};
           const summary = visitor.summary || {};
 
-          // Auto-calculate intent and score if they don't explicitly exist yet
           const autoScore =
             summary.conversations_count > 0
               ? "High"
@@ -61,7 +64,7 @@ export default function LeadScreen({ onLogout }) {
                 : "Browsing";
 
           return {
-            ...visitor, // Spread raw data FIRST so it doesn't accidentally overwrite the mapped fields below
+            ...visitor, 
             id: profile.anonId || key,
             name: profile.username || "Anonymous",
             timestamp: profile.lastActiveAt || null,
@@ -77,7 +80,6 @@ export default function LeadScreen({ onLogout }) {
         });
       }
 
-      // 3. Sort so newest leads ALWAYS appear at the top
       leadsArray.sort((a, b) => {
         const dateA = new Date(a.timestamp || 0).getTime();
         const dateB = new Date(b.timestamp || 0).getTime();
@@ -106,7 +108,6 @@ export default function LeadScreen({ onLogout }) {
   const filteredLeads = leads.filter((lead) => {
     const searchString = searchTerm.toLowerCase();
 
-    // 1. Search Logic
     const matchesSearch =
       lead.name?.toLowerCase().includes(searchString) ||
       lead.email?.toLowerCase().includes(searchString) ||
@@ -115,11 +116,9 @@ export default function LeadScreen({ onLogout }) {
       lead.business_type?.toLowerCase().includes(searchString) ||
       lead.id?.toLowerCase().includes(searchString);
 
-    // 2. Score Logic
     const matchesScore =
       filterScore === "All" || lead.lead_score === filterScore;
 
-    // 3. Status Logic
     const matchesStatus =
       filterStatus === "All"
         ? true
@@ -129,18 +128,15 @@ export default function LeadScreen({ onLogout }) {
             ? lead.booking_status !== "Meeting Booked" && !lead.booked_slot
             : true;
 
-    // 4. Date Logic (Using robust Math instead of setDate to prevent month-wrapping bugs)
     let matchesDate = true;
     if (filterDate !== "All") {
       if (!lead.timestamp) {
         matchesDate = false;
       } else {
         const leadTime = new Date(lead.timestamp).getTime();
-
         const today = new Date();
-        today.setHours(0, 0, 0, 0); // Reset to midnight so "Today" acts as a whole 24-hour block
+        today.setHours(0, 0, 0, 0); 
         const todayTime = today.getTime();
-
         const ONE_DAY = 24 * 60 * 60 * 1000;
 
         if (filterDate === "Today") {
@@ -170,7 +166,6 @@ export default function LeadScreen({ onLogout }) {
 
   return (
     <main className="relative z-10 flex-grow w-full max-w-[1600px] mx-auto px-6 sm:px-12 py-8 fade-in">
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-[var(--foreground)] tracking-tight">
@@ -182,7 +177,6 @@ export default function LeadScreen({ onLogout }) {
         </div>
       </div>
 
-      {/* Enterprise Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
           { label: "Total Captures", value: totalLeads, highlight: false },
@@ -210,16 +204,13 @@ export default function LeadScreen({ onLogout }) {
         ))}
       </div>
 
-      {/* Main Table Container */}
       <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl flex flex-col overflow-hidden relative shadow-sm">
-        {/* Loading Overlay */}
         {isLoadingLeads && (
           <div className="absolute inset-0 z-20 bg-[var(--card-bg)]/80 backdrop-blur-sm flex flex-col items-center justify-center">
             <div className="w-8 h-8 border-2 border-[var(--border-color)] border-t-[var(--primary)] rounded-full animate-spin"></div>
           </div>
         )}
 
-        {/* Controls Bar */}
         <div className="px-6 py-4 border-b border-[var(--border-color)] bg-[var(--background)]/30 flex flex-col xl:flex-row gap-4 justify-between items-center">
           <div className="relative w-full xl:w-[320px]">
             <svg
@@ -267,7 +258,6 @@ export default function LeadScreen({ onLogout }) {
           </div>
         </div>
 
-        {/* Data Table */}
         <div className="overflow-x-auto min-h-[500px]">
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead>
@@ -275,103 +265,64 @@ export default function LeadScreen({ onLogout }) {
                 <th className="px-6 py-4 font-semibold">Prospect & Ref ID</th>
                 <th className="px-6 py-4 font-semibold">Inquiry</th>
 
-                {/* Embedded Status Column Filter */}
                 <th className="px-6 py-4 font-semibold">
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
                     className="bg-transparent font-semibold text-[var(--foreground-muted)] uppercase tracking-widest focus:outline-none cursor-pointer hover:text-[var(--foreground)] transition-colors"
                   >
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="All"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="All">
                       STATUS (ALL)
                     </option>
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="Booked"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="Booked">
                       BOOKED
                     </option>
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="Unbooked"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="Unbooked">
                       UNBOOKED
                     </option>
                   </select>
                 </th>
 
-                {/* Embedded Score Column Filter */}
                 <th className="px-6 py-4 font-semibold">
                   <select
                     value={filterScore}
                     onChange={(e) => setFilterScore(e.target.value)}
                     className="bg-transparent font-semibold text-[var(--foreground-muted)] uppercase tracking-widest focus:outline-none cursor-pointer hover:text-[var(--foreground)] transition-colors"
                   >
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="All"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="All">
                       SCORE (ALL)
                     </option>
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="High"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="High">
                       HIGH INTENT
                     </option>
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="Medium"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="Medium">
                       MEDIUM INTENT
                     </option>
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="Low"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="Low">
                       LOW INTENT
                     </option>
                   </select>
                 </th>
 
-                {/* Embedded Date Column Filter */}
                 <th className="px-6 py-4 font-semibold">
                   <select
                     value={filterDate}
                     onChange={(e) => setFilterDate(e.target.value)}
                     className="bg-transparent font-semibold text-[var(--foreground-muted)] uppercase tracking-widest focus:outline-none cursor-pointer hover:text-[var(--foreground)] transition-colors"
                   >
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="All"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="All">
                       ALL TIME
                     </option>
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="Today"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="Today">
                       TODAY
                     </option>
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="3Days"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="3Days">
                       LAST 3 DAYS
                     </option>
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="7Days"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="7Days">
                       LAST 7 DAYS
                     </option>
-                    <option
-                      className="bg-[var(--card-bg)] text-[var(--foreground)]"
-                      value="30Days"
-                    >
+                    <option className="bg-[var(--card-bg)] text-[var(--foreground)]" value="30Days">
                       LAST 30 DAYS
                     </option>
                   </select>
@@ -387,7 +338,6 @@ export default function LeadScreen({ onLogout }) {
                   onClick={() => openLeadDetails(lead)}
                   className="hover:bg-[var(--background)] transition-colors cursor-pointer group"
                 >
-                  {/* Prospect */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded bg-[var(--background)] border border-[var(--border-color)] flex items-center justify-center text-[var(--foreground)] font-bold text-xs group-hover:border-[var(--primary)] group-hover:text-[var(--primary)] transition-colors shadow-inner">
@@ -411,7 +361,6 @@ export default function LeadScreen({ onLogout }) {
                     </div>
                   </td>
 
-                  {/* Inquiry */}
                   <td className="px-6 py-4">
                     <div className="text-[var(--foreground)] text-sm truncate max-w-[180px]">
                       {lead.business_name ||
@@ -424,7 +373,6 @@ export default function LeadScreen({ onLogout }) {
                     </div>
                   </td>
 
-                  {/* Status */}
                   <td className="px-6 py-4">
                     <span
                       className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
@@ -441,7 +389,6 @@ export default function LeadScreen({ onLogout }) {
                     </span>
                   </td>
 
-                  {/* Score */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <div
@@ -459,7 +406,6 @@ export default function LeadScreen({ onLogout }) {
                     </div>
                   </td>
 
-                  {/* Capture Date */}
                   <td className="px-6 py-4 text-[var(--foreground-muted)] text-xs font-mono">
                     {lead.timestamp
                       ? new Date(lead.timestamp).toLocaleDateString(undefined, {
@@ -470,7 +416,6 @@ export default function LeadScreen({ onLogout }) {
                       : "N/A"}
                   </td>
 
-                  {/* Action */}
                   <td className="px-6 py-4 text-right">
                     <span className="text-[var(--primary)] text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end gap-1">
                       View{" "}
@@ -507,9 +452,6 @@ export default function LeadScreen({ onLogout }) {
         </div>
       </div>
 
-      {/* =========================================
-          ENTERPRISE SLIDE-OVER DOSSIER PANEL
-      ========================================= */}
       <div
         className={`fixed inset-0 z-50 transition-opacity duration-300 ${isPanelOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
       >
