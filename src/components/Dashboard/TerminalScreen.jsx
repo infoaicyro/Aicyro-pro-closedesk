@@ -4,8 +4,8 @@
 import { useState, useEffect } from "react";
 
 // 🔥 TICKET 14: Included so the file is ready for "data_deleted" logging when a delete button is added
-import { createPulseLogger } from "../../../lib/loggerPresets";
-import { recordAuditTrail } from "../../../lib/auditTracer";
+import { createPulseLogger } from "../../lib/loggerPresets";
+import { recordAuditTrail } from "../../lib/auditTracer";
 const pulseLogger = createPulseLogger("TerminalScreen");
 
 export default function LeadScreen({ onLogout }) {
