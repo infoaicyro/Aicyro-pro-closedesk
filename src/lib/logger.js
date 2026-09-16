@@ -28,8 +28,16 @@ const ALLOWED_CONTEXT_FIELDS = [
   "error_message",
   "duration_ms",
   "ai_model",
-  "prompt_version",
   "tool_name",
+  "action_by",
+  "target_id",
+  "status",
+  // 🚨 TICKET 22: Explicitly whitelist versioning fields so QA can filter by them
+  "application_version",
+  "build_id",
+  "prompt_version",
+  "knowledge_version",
+  "configuration_version"
 ];
 
 const REDACT_KEYS_SECRETS =
@@ -160,6 +168,8 @@ export class CloseDeskLogger {
       if (currentPath.startsWith("/lg") || currentPath.startsWith("/logs")) {
         dynamicService = "Pulse";
       }
+    } else if (process.env.NODE_ENV === "production") {
+      dynamicEnv = "production";
     }
 
     const {
@@ -182,7 +192,12 @@ export class CloseDeskLogger {
       session_id: correlation.session_id || this.defaultCorrelation.session_id,
     };
 
-    const contextFields = {};
+    // 🚨 TICKET 22: Universally append versioning to every log (Client or Server)
+    const contextFields = {
+      application_version: process.env.NEXT_PUBLIC_APP_VERSION || "1.0.0",
+      build_id: process.env.VERCEL_GIT_COMMIT_SHA || process.env.NEXT_PUBLIC_BUILD_ID || "local_build",
+    };
+    
     const metadata = { ...payloadMetadata };
 
     Object.keys(mergedContext).forEach((key) => {
