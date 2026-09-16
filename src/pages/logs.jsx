@@ -18,7 +18,7 @@ export default function SystemLogs() {
   const [totalDbLogs, setTotalDbLogs] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 🚨 TICKET 20: Live Mode State
+  // Live Mode State
   const [isLiveMode, setIsLiveMode] = useState(true);
 
   // General Filtering States
@@ -67,7 +67,6 @@ export default function SystemLogs() {
     }
   }, []);
 
-  // 🚨 TICKET 20: Wrapped in useCallback to safely use inside interval without infinite loops
   const fetchLogsSecurely = useCallback(async (isBackgroundPoll = false) => {
     if (authStatus !== "AUTHORIZED") return;
 
@@ -112,13 +111,13 @@ export default function SystemLogs() {
       setIsLoading(true);
       fetchLogsSecurely(false);
     }
-  }, [authStatus, activeRole, targetClientId]); // Intentionally not including fetchLogsSecurely to prevent loading spinner flash
+  }, [authStatus, activeRole, targetClientId]);
 
-  // 🚨 TICKET 20: Live Tailing Poller
+  // Live Tailing Poller
   useEffect(() => {
     if (authStatus === "AUTHORIZED" && isLiveMode) {
       pollIntervalRef.current = setInterval(() => {
-        fetchLogsSecurely(true); // True = Background poll (doesn't trigger full UI loading spinner)
+        fetchLogsSecurely(true);
       }, 5000);
       return () => clearInterval(pollIntervalRef.current);
     }
@@ -202,6 +201,65 @@ export default function SystemLogs() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // 🚨 TICKET 23: Data Export Logic
+  const handleExport = (format) => {
+    if (activeRole === "CLIENT") {
+      alert("Export permission is restricted to authorized administrative roles.");
+      return;
+    }
+
+    if (filteredLogs.length === 0) {
+      alert("No logs match the current filters.");
+      return;
+    }
+
+    try {
+      let exportData = "";
+      let mimeType = "";
+      let fileExtension = "";
+
+      if (format === "JSON") {
+        exportData = JSON.stringify(filteredLogs, null, 2);
+        mimeType = "application/json";
+        fileExtension = "json";
+      } else if (format === "CSV") {
+        const headers = [
+          "timestamp", "level", "environment", "service", "component", 
+          "event_type", "event_name", "session_id", "correlation_id", 
+          "lead_id", "action_by", "target_id", "status_code", "duration_ms", 
+          "message", "error_message", "application_version", "build_id"
+        ];
+        
+        const rows = filteredLogs.map(log => {
+          return headers.map(header => {
+            let val = log[header] || log.metadata?.[header] || "";
+            if (typeof val === "object") val = JSON.stringify(val);
+            return `"${String(val).replace(/"/g, '""')}"`; // Safely escape quotes and newlines
+          }).join(",");
+        });
+        
+        exportData = [headers.join(","), ...rows].join("\n");
+        mimeType = "text/csv";
+        fileExtension = "csv";
+      }
+
+      // Safely handle large payloads using a Blob
+      const blob = new Blob([exportData], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `system_logs_export_${new Date().toISOString().split('T')[0]}.${fileExtension}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+    } catch (error) {
+      console.error("Export failed:", error);
+      alert("Failed to generate export file. The dataset might be too large for browser memory.");
+    }
+  };
+
   if (authStatus === "DENIED") {
     return (
       <div className="min-h-screen bg-[var(--background)] flex flex-col items-center justify-center p-4">
@@ -263,7 +321,6 @@ export default function SystemLogs() {
             
             <div className="flex gap-2 w-full md:w-auto shrink-0 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
               
-              {/* 🚨 TICKET 20: Manual Refresh Button */}
               <button 
                 onClick={() => fetchLogsSecurely(false)} 
                 disabled={isLiveMode}
@@ -275,7 +332,6 @@ export default function SystemLogs() {
                 </svg>
               </button>
 
-              {/* 🚨 TICKET 20: Live Mode Toggle */}
               <button 
                 onClick={() => setIsLiveMode(!isLiveMode)} 
                 className={`px-3 py-2.5 border rounded-xl text-xs font-bold flex flex-1 md:flex-none justify-center items-center gap-2 transition-colors whitespace-nowrap ${isLiveMode ? "bg-green-500/10 border-green-500/30 text-green-500 hover:bg-green-500/20" : "bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`}
@@ -296,7 +352,6 @@ export default function SystemLogs() {
                 )}
               </button>
 
-              {/* TICKET 19: Chronological Sorting */}
               <button 
                 onClick={() => setSortOrder(prev => prev === "DESC" ? "ASC" : "DESC")} 
                 className={`px-4 py-2.5 border rounded-xl text-xs font-bold flex flex-1 md:flex-none justify-center items-center gap-2 transition-colors whitespace-nowrap ${sortOrder === "ASC" ? "bg-purple-500/10 border-purple-500/30 text-purple-400" : "bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`}
@@ -314,6 +369,26 @@ export default function SystemLogs() {
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
                 Filters
               </button>
+
+              {/* 🚨 TICKET 23: Export Buttons (Restricted by Role) */}
+              {activeRole !== "CLIENT" && (
+                <div className="flex gap-1 border-l border-[var(--border-color)] pl-2 ml-1">
+                  <button 
+                    onClick={() => handleExport("JSON")} 
+                    className="px-3 py-2.5 bg-[var(--background)] border border-[var(--border-color)] rounded-lg text-xs font-bold text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors"
+                    title="Export to JSON"
+                  >
+                    JSON
+                  </button>
+                  <button 
+                    onClick={() => handleExport("CSV")} 
+                    className="px-3 py-2.5 bg-[var(--background)] border border-[var(--border-color)] rounded-lg text-xs font-bold text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors"
+                    title="Export to CSV"
+                  >
+                    CSV
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
