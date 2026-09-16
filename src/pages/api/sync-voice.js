@@ -6,7 +6,6 @@ import { ref, get, update, set, push } from "firebase/database";
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const isValidWebsite = (url) => /^[^\s]+\.[^\s]+$/.test(url);
 
-// --- SECURITY: Payload Validation ---
 const isValidSessionId = (id) => /^lead_\d+_[a-z0-9]{5,10}$/i.test(id);
 
 async function handler(req, res, apiLogger) {
@@ -29,16 +28,14 @@ async function handler(req, res, apiLogger) {
     return res.status(400).json({ error: "A valid session_id is required." });
   }
 
-  // --- TELEMETRY LOGGING (Ticket 8: Turn Latency & Stage Observability) ---
+  // --- TELEMETRY LOGGING ---
   if (action === "log_telemetry") {
     try {
-      // Save raw metric to Firebase for deep analysis
       await push(ref(db, `voice_telemetry/${session_id}`), {
         timestamp: new Date().toISOString(),
         ...telemetry_data,
       });
 
-      // 🚨 TICKET 8: Explicitly log the slow stages to your central dashboard
       apiLogger.info("voice_telemetry", "turn_metrics_recorded", {
         context: { session_id, turn_id: telemetry_data.turn_id },
         metadata: {
@@ -49,7 +46,7 @@ async function handler(req, res, apiLogger) {
           total_turn_latency_ms: telemetry_data.total_turn_latency,
           interrupted: telemetry_data.interrupted
         },
-        duration_ms: telemetry_data.total_turn_latency // Attach total duration to the master log
+        duration_ms: telemetry_data.total_turn_latency 
       });
 
       return res.status(200).json({ success: true });
@@ -59,7 +56,7 @@ async function handler(req, res, apiLogger) {
     }
   }
 
-  // --- ERROR LOGGING (Ticket 8: Separating Error Categories) ---
+  // --- ERROR LOGGING ---
   if (action === "log_error") {
     try {
       await push(ref(db, `voice_errors/${session_id}`), {
@@ -69,7 +66,6 @@ async function handler(req, res, apiLogger) {
         raw_error: raw_error || null,
       });
 
-      // 🚨 TICKET 8: Dynamically classify the error so developers can search by type
       let errorCategory = "voice_network_error";
       const stageUpper = (error_stage || "").toUpperCase();
       
@@ -89,15 +85,12 @@ async function handler(req, res, apiLogger) {
     }
   }
 
-  // --- TRANSCRIPT LOGGING FOR TEXT/VOICE CONTINUITY ---
+  // --- TRANSCRIPT LOGGING ---
   if (action === "log_transcript") {
     try {
       if (!text) return res.status(200).json({ success: true });
       await push(ref(db, `transcripts/${session_id}`), {
-        role,
-        text,
-        channel: "voice",
-        timestamp: new Date().toISOString(),
+        role, text, channel: "voice", timestamp: new Date().toISOString(),
       });
       return res.status(200).json({ success: true });
     } catch (error) {
@@ -146,12 +139,14 @@ async function handler(req, res, apiLogger) {
         mergedContext.business_context.website = tool_args.website_url;
         const auditIsNew = await ensureActionIdempotency("TRIGGER_AUDIT");
         next_action = "REQUEST_WEBSITE_AUDIT";
+        apiLogger.info("booking_lifecycle", "inspection_requested", { context: { session_id }}); // 🚨 TICKET 10
         resultPayload.message = auditIsNew ? "Audit submitted successfully." : "Audit already submitted.";
         break;
 
       case "request_consultation":
         const consultIsNew = await ensureActionIdempotency("SCHEDULE_CONSULTATION");
         next_action = "SCHEDULE_CONSULTATION";
+        apiLogger.info("booking_lifecycle", "booking_requested", { context: { session_id }}); // 🚨 TICKET 10
         resultPayload.message = consultIsNew ? "Consultation requested." : "Consultation already tracked.";
         break;
 
@@ -159,7 +154,23 @@ async function handler(req, res, apiLogger) {
         mergedContext.contact_info.phone = tool_args.phone_number;
         const cbIsNew = await ensureActionIdempotency("REQUEST_CALLBACK");
         next_action = "REQUEST_CALLBACK";
+        apiLogger.info("booking_lifecycle", "callback_requested", { context: { session_id }}); // 🚨 TICKET 10
         resultPayload.message = cbIsNew ? "Callback requested successfully." : "Callback already logged.";
+        break;
+
+      // 🚨 TICKET 10: New Tools tracked for Quotes & Service Requests
+      case "request_quote":
+        const quoteIsNew = await ensureActionIdempotency("REQUEST_QUOTE");
+        next_action = "REQUEST_QUOTE";
+        apiLogger.info("booking_lifecycle", "quote_requested", { context: { session_id }});
+        resultPayload.message = quoteIsNew ? "Quote requested." : "Quote already requested.";
+        break;
+
+      case "create_service_request":
+        const srIsNew = await ensureActionIdempotency("CREATE_SERVICE_REQUEST");
+        next_action = "SERVICE_REQUEST_CREATED";
+        apiLogger.info("booking_lifecycle", "service_request_created", { context: { session_id }});
+        resultPayload.message = srIsNew ? "Service request created." : "Service request already exists.";
         break;
 
       case "request_human_handoff":
