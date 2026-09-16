@@ -25,7 +25,7 @@ export default function SystemLogs() {
   const [filterEnvironment, setFilterEnvironment] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // 🚨 TICKET 18: Advanced Tracking Filters
+  // Advanced Tracking Filters
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -34,7 +34,10 @@ export default function SystemLogs() {
   const [filterLeadId, setFilterLeadId] = useState("");
   const [filterStatus, setFilterStatus] = useState("ALL");
 
-  // 🚨 TICKET 18: Expanded Row State
+  // 🚨 TICKET 19: Chronological Sorting State
+  const [sortOrder, setSortOrder] = useState("DESC"); // "DESC" = Newest First, "ASC" = Oldest First
+
+  // Expanded Row State
   const [expandedLogId, setExpandedLogId] = useState(null);
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -125,12 +128,12 @@ export default function SystemLogs() {
       if (filterEnvironment !== "ALL" && env !== filterEnvironment.toLowerCase()) return false;
       if (filterStatus !== "ALL" && String(log.status_code) !== filterStatus && log.status !== filterStatus && log.metadata?.status !== filterStatus) return false;
 
-      // 🚨 TICKET 18: Advanced Strict Filters
+      // Advanced Strict Filters
       if (filterSessionId && !log.session_id?.toLowerCase().includes(filterSessionId.toLowerCase())) return false;
       if (filterCorrelationId && !log.correlation_id?.toLowerCase().includes(filterCorrelationId.toLowerCase())) return false;
       if (filterLeadId && !(log.lead_id || log.metadata?.lead_id)?.toLowerCase().includes(filterLeadId.toLowerCase())) return false;
 
-      // 🚨 TICKET 18: Date Range Filters
+      // Date Range Filters
       if (dateFrom && new Date(log.timestamp) < new Date(dateFrom)) return false;
       if (dateTo && new Date(log.timestamp) > new Date(dateTo)) return false;
 
@@ -152,13 +155,18 @@ export default function SystemLogs() {
       return true;
     });
 
-    // 🚨 TICKET 18: Ensure Newest First Default Sorting
-    result.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // 🚨 TICKET 19: Apply Selected Sort Order
+    result.sort((a, b) => {
+      const dateA = new Date(a.timestamp).getTime();
+      const dateB = new Date(b.timestamp).getTime();
+      return sortOrder === "DESC" ? dateB - dateA : dateA - dateB;
+    });
+
     return result;
 
-  }, [logs, filterService, filterComponent, filterLevel, filterEnvironment, searchTerm, dateFrom, dateTo, filterSessionId, filterCorrelationId, filterLeadId, filterStatus]);
+  }, [logs, filterService, filterComponent, filterLevel, filterEnvironment, searchTerm, dateFrom, dateTo, filterSessionId, filterCorrelationId, filterLeadId, filterStatus, sortOrder]);
 
-  useEffect(() => { setCurrentPage(1); }, [filterService, filterComponent, filterLevel, filterEnvironment, searchTerm, dateFrom, dateTo, filterSessionId, filterCorrelationId, filterLeadId, filterStatus]);
+  useEffect(() => { setCurrentPage(1); }, [filterService, filterComponent, filterLevel, filterEnvironment, searchTerm, dateFrom, dateTo, filterSessionId, filterCorrelationId, filterLeadId, filterStatus, sortOrder]);
 
   const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
   const paginatedLogs = filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -175,6 +183,16 @@ export default function SystemLogs() {
 
   const toggleRowExpansion = (id) => {
     setExpandedLogId(expandedLogId === id ? null : id);
+  };
+
+  // 🚨 TICKET 19: Trigger chronological trace reconstruction
+  const handleViewTrace = (correlationId) => {
+    setFilterCorrelationId(correlationId);
+    setSortOrder("ASC"); // Reconstruct chronologically (oldest to newest)
+    setShowAdvancedFilters(true);
+    setCurrentPage(1);
+    setExpandedLogId(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (authStatus === "DENIED") {
@@ -230,15 +248,32 @@ export default function SystemLogs() {
         </header>
 
         <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-4 shadow-sm mb-6 flex flex-col gap-4">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-grow">
+          <div className="flex flex-col md:flex-row items-center gap-3 w-full">
+            <div className="relative flex-grow w-full min-w-0">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--foreground-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
               <input type="text" placeholder="Global search: endpoints, builds, errors, tool names..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[var(--background)] border border-[var(--border-color)] rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-[var(--primary)] transition-colors" />
             </div>
-            <button onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} className={`px-4 py-2.5 border rounded-xl text-sm font-bold flex items-center gap-2 transition-colors ${showAdvancedFilters ? "bg-[var(--primary)]/10 border-[var(--primary)]/30 text-[var(--primary)]" : "bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`}>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-              Advanced Filters
-            </button>
+            
+            <div className="flex gap-2 w-full md:w-auto shrink-0">
+              {/* 🚨 TICKET 19: Chronological Order Toggle Button */}
+              <button 
+                onClick={() => setSortOrder(prev => prev === "DESC" ? "ASC" : "DESC")} 
+                className={`px-4 py-2.5 border rounded-xl text-xs font-bold flex flex-1 md:flex-none justify-center items-center gap-2 transition-colors whitespace-nowrap ${sortOrder === "ASC" ? "bg-purple-500/10 border-purple-500/30 text-purple-400" : "bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {sortOrder === "DESC" ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4" />}
+                </svg>
+                {sortOrder === "DESC" ? "Newest First" : "Chronological"}
+              </button>
+
+              <button 
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} 
+                className={`px-4 py-2.5 border rounded-xl text-xs font-bold flex flex-1 md:flex-none justify-center items-center gap-2 transition-colors whitespace-nowrap ${showAdvancedFilters ? "bg-[var(--primary)]/10 border-[var(--primary)]/30 text-[var(--primary)]" : "bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+                Filters
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-3 w-full">
@@ -262,7 +297,7 @@ export default function SystemLogs() {
             </select>
           </div>
 
-          {/* 🚨 TICKET 18: Advanced Filter Panel */}
+          {/* Advanced Filter Panel */}
           {showAdvancedFilters && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 mt-2 bg-[var(--background)]/50 border border-[var(--border-color)] rounded-xl animate-acy-fade">
               <div>
@@ -290,7 +325,7 @@ export default function SystemLogs() {
                 <input type="text" placeholder="200, 500, success, failed..." value={filterStatus === "ALL" ? "" : filterStatus} onChange={(e) => setFilterStatus(e.target.value || "ALL")} className="w-full bg-[var(--card-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]" />
               </div>
               <div className="col-span-1 md:col-span-2 flex items-end justify-end gap-2">
-                <button onClick={() => { setDateFrom(""); setDateTo(""); setFilterSessionId(""); setFilterCorrelationId(""); setFilterLeadId(""); setFilterStatus("ALL"); }} className="px-4 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--logo-politico-red)] text-xs font-bold rounded-lg transition-colors">Clear Advanced</button>
+                <button onClick={() => { setDateFrom(""); setDateTo(""); setFilterSessionId(""); setFilterCorrelationId(""); setFilterLeadId(""); setFilterStatus("ALL"); setSortOrder("DESC"); }} className="px-4 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--logo-politico-red)] text-xs font-bold rounded-lg transition-colors">Clear Advanced</button>
               </div>
             </div>
           )}
@@ -324,7 +359,6 @@ export default function SystemLogs() {
                     const eventName = log.event_name || (log.type === "click" ? `Clicked: ${log.text?.substring(0, 20)}` : log.type === "page_view" ? `Viewed: ${log.path}` : "System Event");
                     const eventType = log.event_type || log.type || "user_action";
 
-                    // Extracted Phase 2 & 3 Context
                     const toolName = log.tool_name || log.metadata?.tool_name;
                     const leadId = log.lead_id || log.metadata?.lead_id;
                     const dbPath = log.path || log.metadata?.path;
@@ -410,29 +444,71 @@ export default function SystemLogs() {
                                 {log.error_message ? `Err: ${log.error_message}` : log.message || "Trace Logged"}
                               </span>
 
-                              {/* Notification Badges */}
                               {log.metadata && activeRole === "SUPERADMIN" && <span className="text-[9px] text-yellow-500 font-bold uppercase mt-1">Has Hidden Metadata (Click)</span>}
                               {!log.metadata && activeRole === "CLIENT" && <span className="text-[9px] text-[var(--foreground-muted)] uppercase tracking-widest opacity-60 mt-1">Data Redacted</span>}
                             </div>
                           </td>
                         </tr>
 
-                        {/* 🚨 TICKET 18: Expandable Metadata View */}
+                        {/* 🚨 TICKET 19: Deep Trace Inspection Expandable Row */}
                         {isExpanded && (
-                          <tr className="bg-[var(--background)]">
-                            <td colSpan="5" className="px-8 py-6 border-b border-[var(--border-color)] shadow-inner">
-                              <div className="flex justify-between items-center mb-3">
-                                <h4 className="text-xs font-bold text-[var(--foreground-muted)] uppercase tracking-widest">Deep Trace Inspection</h4>
-                                {(log.application_version || log.build_id) && (
-                                  <span className="text-[10px] font-mono text-[var(--accent-blue)] bg-[var(--accent-blue)]/10 px-2 py-1 rounded">
-                                    App v{log.application_version || "1.0.0"} | Build {log.build_id?.substring(0,7) || "local"}
-                                  </span>
+                          <tr className="bg-[var(--background)] border-b border-[var(--border-color)] shadow-inner">
+                            <td colSpan="5" className="px-8 py-6">
+                              <div className="flex flex-col gap-6">
+                                
+                                {/* Header & Actions */}
+                                <div className="flex justify-between items-center">
+                                  <h4 className="text-sm font-black text-[var(--foreground)] tracking-tight uppercase">Deep Trace Inspection</h4>
+                                  <div className="flex gap-3 items-center">
+                                    {log.correlation_id && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleViewTrace(log.correlation_id); }}
+                                        className="flex items-center gap-2 px-4 py-2 bg-[var(--accent-blue)]/10 text-[var(--accent-blue)] border border-[var(--accent-blue)]/30 rounded-lg text-xs font-bold hover:bg-[var(--accent-blue)] hover:text-white transition-colors"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                        View Entire Trace
+                                      </button>
+                                    )}
+                                    <button onClick={(e) => { e.stopPropagation(); toggleRowExpansion(null); }} className="p-1 text-[var(--foreground-muted)] hover:text-[var(--logo-politico-red)] transition-colors">
+                                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Extracted Metadata Grid */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl">
+                                  <div><p className="text-[9px] uppercase font-bold text-[var(--foreground-muted)]">Timestamp</p><p className="text-xs font-mono text-[var(--foreground)] mt-1">{log.timestamp ? new Date(log.timestamp).toISOString() : "N/A"}</p></div>
+                                  <div><p className="text-[9px] uppercase font-bold text-[var(--foreground-muted)]">Environment</p><p className="text-xs font-mono text-[var(--foreground)] mt-1">{log.environment} (v{log.application_version || "1.0"})</p></div>
+                                  <div><p className="text-[9px] uppercase font-bold text-[var(--foreground-muted)]">Service / Component</p><p className="text-xs font-semibold text-[var(--foreground)] mt-1">{log.service} &rarr; {log.component}</p></div>
+                                  <div><p className="text-[9px] uppercase font-bold text-[var(--foreground-muted)]">Performance</p><p className="text-xs font-mono text-[var(--foreground)] mt-1">{log.duration_ms ? `${log.duration_ms} ms` : "N/A"}</p></div>
+                                  
+                                  <div><p className="text-[9px] uppercase font-bold text-[var(--foreground-muted)]">Correlation Trace</p><p className="text-xs font-mono text-[var(--accent-blue)] mt-1">{log.correlation_id || "N/A"}</p></div>
+                                  <div><p className="text-[9px] uppercase font-bold text-[var(--foreground-muted)]">Session ID</p><p className="text-xs font-mono text-[var(--foreground)] mt-1">{log.session_id || "N/A"}</p></div>
+                                  <div><p className="text-[9px] uppercase font-bold text-[var(--foreground-muted)]">Lead ID</p><p className="text-xs font-mono text-[var(--foreground)] mt-1">{log.lead_id || log.metadata?.lead_id || "N/A"}</p></div>
+                                  <div><p className="text-[9px] uppercase font-bold text-[var(--foreground-muted)]">Request ID</p><p className="text-xs font-mono text-[var(--foreground)] mt-1">{log.request_id || "N/A"}</p></div>
+                                </div>
+
+                                {/* Stack Trace & Errors */}
+                                {(log.error_message || log.error_code || log.error) && (
+                                  <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+                                    <h5 className="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-2">Error Details</h5>
+                                    <p className="text-xs text-red-400 font-mono mb-3">Code: {log.error_code || "N/A"} | Msg: {log.error_message || log.message}</p>
+                                    {log.error && (
+                                      <pre className="text-[10px] text-red-300 font-mono overflow-x-auto whitespace-pre-wrap bg-red-950/30 p-3 rounded-lg border border-red-500/20">
+                                        {typeof log.error === 'object' ? JSON.stringify(log.error, null, 2) : log.error}
+                                      </pre>
+                                    )}
+                                  </div>
                                 )}
+
+                                {/* Raw JSON Dump */}
+                                <div>
+                                  <h5 className="text-[10px] font-bold text-[var(--foreground-muted)] uppercase tracking-wider mb-2">Raw JSON Payload</h5>
+                                  <pre className="text-[11px] text-gray-200 bg-[#0f1115] border border-gray-800 p-4 rounded-xl overflow-x-auto font-mono whitespace-pre-wrap shadow-inner">
+                                    {JSON.stringify(log, null, 2)}
+                                  </pre>
+                                </div>
                               </div>
-                              {/* 🔥 Hardcoded the text to gray-200 so it contrasts with the dark background */}
-<pre className="text-[11px] text-gray-200 bg-[#0f1115] border border-gray-800 p-4 rounded-xl overflow-x-auto font-mono whitespace-pre-wrap shadow-inner">
-  {JSON.stringify(log, null, 2)}
-</pre>
                             </td>
                           </tr>
                         )}
