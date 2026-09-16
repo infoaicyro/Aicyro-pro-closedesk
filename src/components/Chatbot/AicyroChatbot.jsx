@@ -11,7 +11,6 @@ import {
 } from "../../lib/activityTracker";
 import { getOrCreateAnonId } from "../../lib/cookiePersonalization";
 
-// Implemented Phase 1 & 2 Tracing
 import { createAiLogger, createVoiceLogger } from "../../lib/loggerPresets";
 import { generateCorrelationId, fetchWithTrace } from "../../lib/tracer";
 
@@ -94,10 +93,7 @@ const TypewriterBubble = ({ msg, onButtonClick, scrollRef, isProcessing, onSpeak
     onSpeakRef.current = onSpeak;
   }, [isMuted, onSpeak]);
 
-  useEffect(() => {
-    uiLogger.info("ui_render", "widget_loaded", { context: { message: "Chatbot initialized" } });
-  }, []);
-
+  useEffect(() => { uiLogger.info("ui_render", "widget_loaded", { context: { message: "Chatbot initialized" } }); }, []);
   useEffect(() => { if (msg.instant) setDisplayedText(msg.text); }, [msg.text, msg.instant]);
 
   useEffect(() => {
@@ -206,22 +202,26 @@ export default function AicyroChatbot() {
     const m = turnMetricsRef.current;
     if (m.response_created) {
       const txId = generateCorrelationId();
+      
+      // 🚨 TICKET 8: Calculating exact latency for each stage of the voice pipeline
+      const payload = {
+        session_id: firebaseDbId, action: "log_telemetry",
+        telemetry_data: {
+          turn_id: m.turn_id,
+          recording_duration: m.speech_stop && m.speech_start ? m.speech_stop - m.speech_start : null,
+          stt_latency: m.stt_completed && m.speech_stop ? m.stt_completed - m.speech_stop : null,
+          ai_latency: m.response_created && m.stt_completed ? m.response_created - m.stt_completed : null,
+          first_audio_latency: m.first_audio && m.response_created ? m.first_audio - m.response_created : null,
+          total_turn_latency: m.response_done && m.speech_start ? m.response_done - m.speech_start : null,
+          interrupted: m.interrupted, 
+          tools: m.tools, 
+          versions: telemetryRef.current.versions,
+        }
+      };
+
       fetchWithTrace(
         "/api/sync-voice",
-        {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            session_id: firebaseDbId, action: "log_telemetry",
-            telemetry_data: {
-              turn_id: m.turn_id,
-              latency_vad_ms: m.speech_stop ? m.response_created - m.speech_stop : null,
-              latency_ttfb_ms: m.first_audio && m.speech_stop ? m.first_audio - m.speech_stop : null,
-              latency_stt_ms: m.stt_completed && m.speech_stop ? m.stt_completed - m.speech_stop : null,
-              total_duration_ms: m.response_done && m.speech_start ? m.response_done - m.speech_start : null,
-              interrupted: m.interrupted, tools: m.tools, versions: telemetryRef.current.versions,
-            },
-          }),
-        },
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) },
         txId,
       ).catch((err) => voiceLogger.error("telemetry", "sync_failed", { error: err }));
     }
@@ -310,15 +310,23 @@ export default function AicyroChatbot() {
     const txId = generateCorrelationId();
     const callLogger = voiceLogger.child({ correlation: { correlation_id: txId } });
 
+    // 🚨 TICKET 8: Voice Session Requested
+    callLogger.info("voice_lifecycle", "voice_session_requested", { context: { session_id: firebaseDbId }});
+
     setVoiceState("REQUESTING_PERMISSION");
     let localStream;
-    const setupStartTime = Date.now();
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("UNSUPPORTED_BROWSER");
       localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      
+      // 🚨 TICKET 8: Mic Permission Granted
+      callLogger.info("voice_lifecycle", "mic_permission_granted");
     } catch (error) {
       setVoiceState("PERMISSION_DENIED");
+      
+      // 🚨 TICKET 8: Mic Permission Denied
+      callLogger.error("voice_lifecycle", "mic_permission_denied", { error });
       logVoiceError("MIC_PERMISSION", "Microphone access denied or failed", error.message || error.name);
       return;
     }
@@ -356,6 +364,10 @@ export default function AicyroChatbot() {
       const dataChannel = pc.createDataChannel("oai-events");
       dataChannel.onopen = () => {
         setVoiceState("LISTENING");
+        
+        // 🚨 TICKET 8: Voice Session Started
+        callLogger.info("voice_lifecycle", "voice_session_started", { context: { session_id: firebaseDbId }});
+
         if (!hasSentStartAlertRef.current) {
           hasSentStartAlertRef.current = true;
           queueEmailAlert("New Voice Call Started", "A visitor has connected to the AI Voice Agent.", leadDataRef.current, "start");
@@ -371,39 +383,71 @@ export default function AicyroChatbot() {
       dataChannel.onmessage = (e) => {
         try {
           const event = JSON.parse(e.data);
+          
+          // 🚨 TICKET 8: AI Processing Started
           if (event.type === "response.created") {
             setVoiceState("PROCESSING");
             activeResponseRef.current = true;
+            callLogger.info("voice_lifecycle", "ai_processing_started");
             if (turnMetricsRef.current) turnMetricsRef.current.response_created = Date.now();
-          } else if (event.type === "response.done" || event.type === "response.cancelled" || event.type === "response.failed") {
+          } 
+          
+          // 🚨 TICKET 8: Audio Response Completed or Interrupted
+          else if (event.type === "response.done" || event.type === "response.cancelled" || event.type === "response.failed") {
             setVoiceState("LISTENING");
             activeResponseRef.current = false;
+            
+            if (event.type === "response.done") callLogger.info("voice_lifecycle", "audio_response_completed");
+            if (event.type === "response.cancelled") callLogger.warn("voice_lifecycle", "response_interrupted");
+
             if (turnMetricsRef.current) {
               turnMetricsRef.current.response_done = Date.now();
               if (event.type === "response.cancelled") turnMetricsRef.current.interrupted = true;
               flushTurnTelemetry();
             }
-          } else if (event.type === "error") {
+          } 
+          
+          else if (event.type === "error") {
             setVoiceState("ERROR");
             activeResponseRef.current = false;
             flushTurnTelemetry();
             logVoiceError("REALTIME_API", "OpenAI Realtime API error", JSON.stringify(event.error));
           }
 
+          // 🚨 TICKET 8: VAD / Speech Started / Barge In
           if (event.type === "input_audio_buffer.speech_started") {
             setVoiceState((prev) => prev === "SPEAKING" ? "INTERRUPTED" : "LISTENING");
+            
+            if (activeResponseRef.current) {
+              callLogger.warn("voice_lifecycle", "barge_in", { context: { message: "User interrupted the AI" }});
+            } else {
+              callLogger.info("voice_lifecycle", "speech_started");
+            }
+
             if (turnMetricsRef.current && activeResponseRef.current) { turnMetricsRef.current.interrupted = true; flushTurnTelemetry(); }
             resetTurnMetrics();
             turnMetricsRef.current.speech_start = Date.now();
-          } else if (event.type === "input_audio_buffer.speech_stopped") {
+          } 
+          
+          // 🚨 TICKET 8: Speech Stopped
+          else if (event.type === "input_audio_buffer.speech_stopped") {
             setVoiceState("PROCESSING");
+            callLogger.info("voice_lifecycle", "speech_stopped");
             if (turnMetricsRef.current) turnMetricsRef.current.speech_stop = Date.now();
-          } else if (event.type === "response.audio.delta") {
+          } 
+          
+          // 🚨 TICKET 8: Audio Response Started (First Buffer)
+          else if (event.type === "response.audio.delta") {
             setVoiceState("SPEAKING");
-            if (turnMetricsRef.current && !turnMetricsRef.current.first_audio) turnMetricsRef.current.first_audio = Date.now();
+            if (turnMetricsRef.current && !turnMetricsRef.current.first_audio) {
+              turnMetricsRef.current.first_audio = Date.now();
+              callLogger.info("voice_lifecycle", "audio_response_started");
+            }
           }
 
+          // 🚨 TICKET 8: Transcription Completed
           if (event.type === "conversation.item.input_audio_transcription.completed") {
+            callLogger.info("voice_lifecycle", "transcription_completed");
             if (turnMetricsRef.current) turnMetricsRef.current.stt_completed = Date.now();
             const cleanTranscript = event.transcript ? event.transcript.replace(/[^\w\s]/gi, "").trim() : "";
             if (!cleanTranscript) {
@@ -416,12 +460,10 @@ export default function AicyroChatbot() {
             }
           }
 
-          // 🔥 TICKET 7: AI Tool Call Execution (WebRTC Mode)
           if (event.type === "response.function_call_arguments.done") {
             const toolStart = Date.now();
             const toolTxId = generateCorrelationId();
             
-            // 🚨 TICKET 7: Safely parse parameters to catch AI hallucinations
             let parsedArgs;
             try {
               parsedArgs = JSON.parse(event.arguments);
@@ -432,53 +474,25 @@ export default function AicyroChatbot() {
                 metadata: { raw_args_snippet: String(event.arguments).substring(0, 50) + "..." }
               });
               
-              dataChannel.send(JSON.stringify({
-                type: "conversation.item.create",
-                item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify({ error: "Invalid JSON Schema" }) },
-              }));
+              dataChannel.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify({ error: "Invalid JSON Schema" }) } }));
               dataChannel.send(JSON.stringify({ type: "response.create" }));
               return;
             }
 
-            // 🚨 TICKET 7: Log tool execution started
-            uiLogger.info("ai_tool", "tool_call_started", {
-              context: { tool_name: event.name, tool_call_id: event.call_id },
-              metadata: { args: parsedArgs } // CloseDeskLogger auto-redacts PII!
-            });
+            uiLogger.info("ai_tool", "tool_call_started", { context: { tool_name: event.name, tool_call_id: event.call_id }, metadata: { args: parsedArgs } });
 
-            fetchWithTrace(
-              "/api/sync-voice",
-              {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ session_id: firebaseDbId, tool_name: event.name, tool_args: parsedArgs }),
-              },
-              toolTxId,
-            )
+            fetchWithTrace("/api/sync-voice", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: firebaseDbId, tool_name: event.name, tool_args: parsedArgs }) }, toolTxId)
               .then((res) => res.json())
               .then((result) => {
                 const duration_ms = Date.now() - toolStart;
-                
-                // 🚨 TICKET 7: Log tool success
-                uiLogger.info("ai_tool", "tool_call_success", {
-                  context: { tool_name: event.name, tool_call_id: event.call_id, result_status: "success" },
-                  duration_ms
-                });
-
+                uiLogger.info("ai_tool", "tool_call_success", { context: { tool_name: event.name, tool_call_id: event.call_id, result_status: "success" }, duration_ms });
                 if (turnMetricsRef.current) turnMetricsRef.current.tools.push({ name: event.name, duration_ms });
-                
                 dataChannel.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify(result) } }));
                 dataChannel.send(JSON.stringify({ type: "response.create" }));
               })
               .catch((err) => {
                 const duration_ms = Date.now() - toolStart;
-                
-                // 🚨 TICKET 7: Log explicit tool failure (distinguishes backend fail vs AI fail)
-                uiLogger.error("ai_tool", "tool_call_failed", {
-                  error: err,
-                  context: { tool_name: event.name, tool_call_id: event.call_id, result_status: "failed" },
-                  duration_ms
-                });
-
+                uiLogger.error("ai_tool", "tool_call_failed", { error: err, context: { tool_name: event.name, tool_call_id: event.call_id, result_status: "failed" }, duration_ms });
                 dataChannel.send(JSON.stringify({ type: "conversation.item.create", item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify({ success: false, error: "Backend error" }) } }));
                 dataChannel.send(JSON.stringify({ type: "response.create" }));
               });
@@ -537,6 +551,10 @@ export default function AicyroChatbot() {
       }
       setVoiceState("IDLE");
       activeResponseRef.current = false;
+      
+      // 🚨 TICKET 8: Voice Session Ended
+      voiceLogger.info("voice_lifecycle", "voice_session_ended", { context: { session_id: firebaseDbId }});
+
       logToFirebase("Call Ended", "Voice connection disconnected.", leadDataRef.current);
       submitLead({ ...leadDataRef.current, last_interaction_at: new Date().toISOString() });
     } catch (error) {
@@ -546,7 +564,10 @@ export default function AicyroChatbot() {
   };
 
   const handleToggleMode = async () => {
-    uiLogger.info("user_action", "voice_button_clicked", { context: { message: `Switching to ${agentMode === "text" ? "voice" : "text"}` } });
+    // 🚨 TICKET 8: Text<->Voice Transitions Logged
+    const transitionEvent = agentMode === "text" ? "text_to_voice_switch" : "voice_to_text_switch";
+    uiLogger.info("voice_lifecycle", transitionEvent, { context: { session_id: firebaseDbId }});
+
     stopSpeech();
     if (agentMode === "text") {
       setAgentMode("voice");
@@ -772,7 +793,6 @@ export default function AicyroChatbot() {
     );
   }
 
-  // 🔥 TICKET 7: UI Tool Call Tracker (Webhook/Booking)
   async function generateAndSendWebhook(data, timeText) {
     const txId = generateCorrelationId();
     const startTime = Date.now();
@@ -820,7 +840,6 @@ export default function AicyroChatbot() {
     addBotMessage(`✅ Contact Confirmed!\n\nYour demo is officially booked for ${timeText}. We have securely saved your details and sent a calendar invite to ${data.email || "your email"}.`, [{ label: "Close Chat", value: "close" }], true);
   }
 
-  // 🔥 TICKET 7: UI Tool Call Tracker (Lead Submission)
   async function submitLead(data) {
     const txId = generateCorrelationId();
     const startTime = Date.now();
