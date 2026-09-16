@@ -1,7 +1,7 @@
 // src/pages/logs.jsx
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { fetchWithTrace, generateCorrelationId } from "../lib/tracer";
 import { useRouter } from "next/router";
 
@@ -17,6 +17,9 @@ export default function SystemLogs() {
   const [logs, setLogs] = useState([]);
   const [totalDbLogs, setTotalDbLogs] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+
+  // 🚨 TICKET 20: Live Mode State
+  const [isLiveMode, setIsLiveMode] = useState(true);
 
   // General Filtering States
   const [filterService, setFilterService] = useState("ALL");
@@ -34,8 +37,8 @@ export default function SystemLogs() {
   const [filterLeadId, setFilterLeadId] = useState("");
   const [filterStatus, setFilterStatus] = useState("ALL");
 
-  // 🚨 TICKET 19: Chronological Sorting State
-  const [sortOrder, setSortOrder] = useState("DESC"); // "DESC" = Newest First, "ASC" = Oldest First
+  // Chronological Sorting State
+  const [sortOrder, setSortOrder] = useState("DESC");
 
   // Expanded Row State
   const [expandedLogId, setExpandedLogId] = useState(null);
@@ -64,7 +67,8 @@ export default function SystemLogs() {
     }
   }, []);
 
-  const fetchLogsSecurely = async () => {
+  // 🚨 TICKET 20: Wrapped in useCallback to safely use inside interval without infinite loops
+  const fetchLogsSecurely = useCallback(async (isBackgroundPoll = false) => {
     if (authStatus !== "AUTHORIZED") return;
 
     try {
@@ -98,18 +102,27 @@ export default function SystemLogs() {
     } catch (error) {
       console.error("Network error fetching logs:", error);
     } finally {
-      setIsLoading(false);
+      if (!isBackgroundPoll) setIsLoading(false);
     }
-  };
+  }, [authStatus, activeRole, targetClientId, searchTerm]);
 
+  // Initial Data Load
   useEffect(() => {
     if (authStatus === "AUTHORIZED") {
       setIsLoading(true);
-      fetchLogsSecurely();
-      pollIntervalRef.current = setInterval(() => { fetchLogsSecurely(); }, 10000);
+      fetchLogsSecurely(false);
+    }
+  }, [authStatus, activeRole, targetClientId]); // Intentionally not including fetchLogsSecurely to prevent loading spinner flash
+
+  // 🚨 TICKET 20: Live Tailing Poller
+  useEffect(() => {
+    if (authStatus === "AUTHORIZED" && isLiveMode) {
+      pollIntervalRef.current = setInterval(() => {
+        fetchLogsSecurely(true); // True = Background poll (doesn't trigger full UI loading spinner)
+      }, 5000);
       return () => clearInterval(pollIntervalRef.current);
     }
-  }, [activeRole, targetClientId, authStatus]);
+  }, [authStatus, isLiveMode, fetchLogsSecurely]);
 
   const filteredLogs = useMemo(() => {
     if (!logs) return [];
@@ -121,23 +134,19 @@ export default function SystemLogs() {
       const lvl = (log.level || (log.type === "click" ? "INFO" : "INFO")).toUpperCase();
       const env = (log.environment || "production").toLowerCase();
 
-      // Dropdown Filters
       if (filterService !== "ALL" && svc !== filterService.toLowerCase()) return false;
       if (filterComponent !== "ALL" && comp !== filterComponent.toLowerCase()) return false;
       if (filterLevel !== "ALL" && lvl !== filterLevel.toUpperCase()) return false;
       if (filterEnvironment !== "ALL" && env !== filterEnvironment.toLowerCase()) return false;
       if (filterStatus !== "ALL" && String(log.status_code) !== filterStatus && log.status !== filterStatus && log.metadata?.status !== filterStatus) return false;
 
-      // Advanced Strict Filters
       if (filterSessionId && !log.session_id?.toLowerCase().includes(filterSessionId.toLowerCase())) return false;
       if (filterCorrelationId && !log.correlation_id?.toLowerCase().includes(filterCorrelationId.toLowerCase())) return false;
       if (filterLeadId && !(log.lead_id || log.metadata?.lead_id)?.toLowerCase().includes(filterLeadId.toLowerCase())) return false;
 
-      // Date Range Filters
       if (dateFrom && new Date(log.timestamp) < new Date(dateFrom)) return false;
       if (dateTo && new Date(log.timestamp) > new Date(dateTo)) return false;
 
-      // Global Search string
       if (lowerSearchTerm) {
         const searchTarget = [
           log.service, log.component, log.event_type, log.type, log.event_name, log.text,
@@ -155,7 +164,6 @@ export default function SystemLogs() {
       return true;
     });
 
-    // 🚨 TICKET 19: Apply Selected Sort Order
     result.sort((a, b) => {
       const dateA = new Date(a.timestamp).getTime();
       const dateB = new Date(b.timestamp).getTime();
@@ -185,10 +193,9 @@ export default function SystemLogs() {
     setExpandedLogId(expandedLogId === id ? null : id);
   };
 
-  // 🚨 TICKET 19: Trigger chronological trace reconstruction
   const handleViewTrace = (correlationId) => {
     setFilterCorrelationId(correlationId);
-    setSortOrder("ASC"); // Reconstruct chronologically (oldest to newest)
+    setSortOrder("ASC"); 
     setShowAdvancedFilters(true);
     setCurrentPage(1);
     setExpandedLogId(null);
@@ -254,8 +261,42 @@ export default function SystemLogs() {
               <input type="text" placeholder="Global search: endpoints, builds, errors, tool names..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[var(--background)] border border-[var(--border-color)] rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-[var(--primary)] transition-colors" />
             </div>
             
-            <div className="flex gap-2 w-full md:w-auto shrink-0">
-              {/* 🚨 TICKET 19: Chronological Order Toggle Button */}
+            <div className="flex gap-2 w-full md:w-auto shrink-0 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
+              
+              {/* 🚨 TICKET 20: Manual Refresh Button */}
+              <button 
+                onClick={() => fetchLogsSecurely(false)} 
+                disabled={isLiveMode}
+                className={`p-2.5 border rounded-xl flex items-center justify-center transition-colors ${isLiveMode ? "opacity-50 cursor-not-allowed bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground-muted)]" : "bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`}
+                title="Refresh Logs"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+
+              {/* 🚨 TICKET 20: Live Mode Toggle */}
+              <button 
+                onClick={() => setIsLiveMode(!isLiveMode)} 
+                className={`px-3 py-2.5 border rounded-xl text-xs font-bold flex flex-1 md:flex-none justify-center items-center gap-2 transition-colors whitespace-nowrap ${isLiveMode ? "bg-green-500/10 border-green-500/30 text-green-500 hover:bg-green-500/20" : "bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`}
+              >
+                {isLiveMode ? (
+                  <>
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    Live
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Paused
+                  </>
+                )}
+              </button>
+
+              {/* TICKET 19: Chronological Sorting */}
               <button 
                 onClick={() => setSortOrder(prev => prev === "DESC" ? "ASC" : "DESC")} 
                 className={`px-4 py-2.5 border rounded-xl text-xs font-bold flex flex-1 md:flex-none justify-center items-center gap-2 transition-colors whitespace-nowrap ${sortOrder === "ASC" ? "bg-purple-500/10 border-purple-500/30 text-purple-400" : "bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`}
@@ -297,7 +338,6 @@ export default function SystemLogs() {
             </select>
           </div>
 
-          {/* Advanced Filter Panel */}
           {showAdvancedFilters && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 mt-2 bg-[var(--background)]/50 border border-[var(--border-color)] rounded-xl animate-acy-fade">
               <div>
@@ -450,13 +490,11 @@ export default function SystemLogs() {
                           </td>
                         </tr>
 
-                        {/* 🚨 TICKET 19: Deep Trace Inspection Expandable Row */}
                         {isExpanded && (
                           <tr className="bg-[var(--background)] border-b border-[var(--border-color)] shadow-inner">
                             <td colSpan="5" className="px-8 py-6">
                               <div className="flex flex-col gap-6">
                                 
-                                {/* Header & Actions */}
                                 <div className="flex justify-between items-center">
                                   <h4 className="text-sm font-black text-[var(--foreground)] tracking-tight uppercase">Deep Trace Inspection</h4>
                                   <div className="flex gap-3 items-center">
@@ -475,7 +513,6 @@ export default function SystemLogs() {
                                   </div>
                                 </div>
 
-                                {/* Extracted Metadata Grid */}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl">
                                   <div><p className="text-[9px] uppercase font-bold text-[var(--foreground-muted)]">Timestamp</p><p className="text-xs font-mono text-[var(--foreground)] mt-1">{log.timestamp ? new Date(log.timestamp).toISOString() : "N/A"}</p></div>
                                   <div><p className="text-[9px] uppercase font-bold text-[var(--foreground-muted)]">Environment</p><p className="text-xs font-mono text-[var(--foreground)] mt-1">{log.environment} (v{log.application_version || "1.0"})</p></div>
@@ -488,7 +525,6 @@ export default function SystemLogs() {
                                   <div><p className="text-[9px] uppercase font-bold text-[var(--foreground-muted)]">Request ID</p><p className="text-xs font-mono text-[var(--foreground)] mt-1">{log.request_id || "N/A"}</p></div>
                                 </div>
 
-                                {/* Stack Trace & Errors */}
                                 {(log.error_message || log.error_code || log.error) && (
                                   <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
                                     <h5 className="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-2">Error Details</h5>
@@ -501,7 +537,6 @@ export default function SystemLogs() {
                                   </div>
                                 )}
 
-                                {/* Raw JSON Dump */}
                                 <div>
                                   <h5 className="text-[10px] font-bold text-[var(--foreground-muted)] uppercase tracking-wider mb-2">Raw JSON Payload</h5>
                                   <pre className="text-[11px] text-gray-200 bg-[#0f1115] border border-gray-800 p-4 rounded-xl overflow-x-auto font-mono whitespace-pre-wrap shadow-inner">
