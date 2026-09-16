@@ -18,12 +18,24 @@ export default function SystemLogs() {
   const [totalDbLogs, setTotalDbLogs] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Advanced Filtering States
+  // General Filtering States
   const [filterService, setFilterService] = useState("ALL");
   const [filterComponent, setFilterComponent] = useState("ALL"); 
   const [filterLevel, setFilterLevel] = useState("ALL");
   const [filterEnvironment, setFilterEnvironment] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
+
+  // 🚨 TICKET 18: Advanced Tracking Filters
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [filterSessionId, setFilterSessionId] = useState("");
+  const [filterCorrelationId, setFilterCorrelationId] = useState("");
+  const [filterLeadId, setFilterLeadId] = useState("");
+  const [filterStatus, setFilterStatus] = useState("ALL");
+
+  // 🚨 TICKET 18: Expanded Row State
+  const [expandedLogId, setExpandedLogId] = useState(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
@@ -54,7 +66,6 @@ export default function SystemLogs() {
 
     try {
       const txId = generateCorrelationId();
-
       const response = await fetchWithTrace(
         "/api/app-query",
         {
@@ -62,10 +73,7 @@ export default function SystemLogs() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             role: activeRole,
-            userId:
-              localStorage.getItem("currentSuperAdmin") ||
-              localStorage.getItem("currentUser") ||
-              "anonymous",
+            userId: localStorage.getItem("currentSuperAdmin") || localStorage.getItem("currentUser") || "anonymous",
             targetClientId: targetClientId,
             searchTerm: searchTerm,
           }),
@@ -95,56 +103,62 @@ export default function SystemLogs() {
     if (authStatus === "AUTHORIZED") {
       setIsLoading(true);
       fetchLogsSecurely();
-
-      pollIntervalRef.current = setInterval(() => {
-        fetchLogsSecurely();
-      }, 10000);
-
+      pollIntervalRef.current = setInterval(() => { fetchLogsSecurely(); }, 10000);
       return () => clearInterval(pollIntervalRef.current);
     }
   }, [activeRole, targetClientId, authStatus]);
 
   const filteredLogs = useMemo(() => {
     if (!logs) return [];
-
     const lowerSearchTerm = searchTerm.toLowerCase().trim();
 
-    return logs.filter((log) => {
+    let result = logs.filter((log) => {
       const svc = (log.service || "Website").toLowerCase();
       const comp = (log.component || "Activity Tracker").toLowerCase(); 
-      const lvl = (
-        log.level || (log.type === "click" ? "INFO" : "INFO")
-      ).toUpperCase();
+      const lvl = (log.level || (log.type === "click" ? "INFO" : "INFO")).toUpperCase();
       const env = (log.environment || "production").toLowerCase();
 
-      const matchesService = filterService === "ALL" || svc === filterService.toLowerCase();
-      const matchesLevel = filterLevel === "ALL" || lvl === filterLevel.toUpperCase();
-      const matchesEnvironment = filterEnvironment === "ALL" || env === filterEnvironment.toLowerCase();
-      const matchesComponent = filterComponent === "ALL" || comp === filterComponent.toLowerCase();
+      // Dropdown Filters
+      if (filterService !== "ALL" && svc !== filterService.toLowerCase()) return false;
+      if (filterComponent !== "ALL" && comp !== filterComponent.toLowerCase()) return false;
+      if (filterLevel !== "ALL" && lvl !== filterLevel.toUpperCase()) return false;
+      if (filterEnvironment !== "ALL" && env !== filterEnvironment.toLowerCase()) return false;
+      if (filterStatus !== "ALL" && String(log.status_code) !== filterStatus && log.status !== filterStatus && log.metadata?.status !== filterStatus) return false;
 
-      let matchesSearch = true;
+      // 🚨 TICKET 18: Advanced Strict Filters
+      if (filterSessionId && !log.session_id?.toLowerCase().includes(filterSessionId.toLowerCase())) return false;
+      if (filterCorrelationId && !log.correlation_id?.toLowerCase().includes(filterCorrelationId.toLowerCase())) return false;
+      if (filterLeadId && !(log.lead_id || log.metadata?.lead_id)?.toLowerCase().includes(filterLeadId.toLowerCase())) return false;
+
+      // 🚨 TICKET 18: Date Range Filters
+      if (dateFrom && new Date(log.timestamp) < new Date(dateFrom)) return false;
+      if (dateTo && new Date(log.timestamp) > new Date(dateTo)) return false;
+
+      // Global Search string
       if (lowerSearchTerm) {
-        // 🔥 PHASES 1-3 MASTER SEARCH ARRAY
         const searchTarget = [
           log.service, log.component, log.event_type, log.type, log.event_name, log.text,
           log.path, log.url, log.user_id, log.user, log.session_id, log.correlation_id,
           log.message, log.error_message, log.source_path, log.endpoint, log.http_method,
           log.status_code, log.build_id, log.application_version, log.prompt_version,
           log.knowledge_version, log.action_by, log.target_id,
-          log.tool_name || log.metadata?.tool_name,
-          log.lead_id || log.metadata?.lead_id,
-          log.integration_name || log.metadata?.integration_name,
-          log.error_stage || log.metadata?.error_stage
+          log.tool_name || log.metadata?.tool_name, log.lead_id || log.metadata?.lead_id,
+          log.integration_name || log.metadata?.integration_name, log.error_stage || log.metadata?.error_stage
         ].filter(Boolean).join(" ").toLowerCase();
 
-        matchesSearch = searchTarget.includes(lowerSearchTerm);
+        if (!searchTarget.includes(lowerSearchTerm)) return false;
       }
 
-      return matchesService && matchesComponent && matchesLevel && matchesEnvironment && matchesSearch;
+      return true;
     });
-  }, [logs, filterService, filterComponent, filterLevel, filterEnvironment, searchTerm]);
 
-  useEffect(() => { setCurrentPage(1); }, [filterService, filterComponent, filterLevel, filterEnvironment, searchTerm]);
+    // 🚨 TICKET 18: Ensure Newest First Default Sorting
+    result.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    return result;
+
+  }, [logs, filterService, filterComponent, filterLevel, filterEnvironment, searchTerm, dateFrom, dateTo, filterSessionId, filterCorrelationId, filterLeadId, filterStatus]);
+
+  useEffect(() => { setCurrentPage(1); }, [filterService, filterComponent, filterLevel, filterEnvironment, searchTerm, dateFrom, dateTo, filterSessionId, filterCorrelationId, filterLeadId, filterStatus]);
 
   const totalPages = Math.ceil(filteredLogs.length / itemsPerPage);
   const paginatedLogs = filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -157,6 +171,10 @@ export default function SystemLogs() {
       case "DEBUG": return "bg-gray-500/10 text-gray-500 border-gray-500/30";
       default: return "bg-blue-500/10 text-blue-600 border-blue-500/30";
     }
+  };
+
+  const toggleRowExpansion = (id) => {
+    setExpandedLogId(expandedLogId === id ? null : id);
   };
 
   if (authStatus === "DENIED") {
@@ -180,15 +198,15 @@ export default function SystemLogs() {
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] font-sans flex flex-col items-center py-10 px-4 sm:px-8">
-      <div className="w-full max-w-7xl">
+      <div className="w-full max-w-[1400px]">
         <header className="mb-6 flex justify-between items-end">
           <div>
-            <h1 className="text-3xl font-black tracking-tight">Secure Activity Logs</h1>
-            <p className="text-[var(--foreground-muted)] font-medium text-sm mt-1">Live audit trail protected by Role-Based Access Control.</p>
+            <h1 className="text-3xl font-black tracking-tight">System Pulse Logs</h1>
+            <p className="text-[var(--foreground-muted)] font-medium text-sm mt-1">Live, searchable audit trail protected by RBAC.</p>
           </div>
           <div className="text-sm font-bold text-[var(--foreground-muted)] flex flex-col items-end gap-2">
             <span className="bg-[var(--card-bg)] border border-[var(--border-color)] px-3 py-1.5 rounded-lg shadow-sm">
-              Showing <span className="text-[var(--primary)]">{filteredLogs.length}</span> / {totalDbLogs.toLocaleString()} Total DB Logs
+              Showing <span className="text-[var(--primary)]">{filteredLogs.length}</span> / {totalDbLogs.toLocaleString()} Entries
             </span>
 
             {isSuperAdminAuth ? (
@@ -212,59 +230,70 @@ export default function SystemLogs() {
         </header>
 
         <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-4 shadow-sm mb-6 flex flex-col gap-4">
-          <div className="relative w-full">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--foreground-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-            <input type="text" placeholder="Search endpoints, status codes, IDs, builds, tools, error messages..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[var(--background)] border border-[var(--border-color)] rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-[var(--primary)] transition-colors" />
+          <div className="flex items-center gap-3">
+            <div className="relative flex-grow">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--foreground-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <input type="text" placeholder="Global search: endpoints, builds, errors, tool names..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[var(--background)] border border-[var(--border-color)] rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-[var(--primary)] transition-colors" />
+            </div>
+            <button onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} className={`px-4 py-2.5 border rounded-xl text-sm font-bold flex items-center gap-2 transition-colors ${showAdvancedFilters ? "bg-[var(--primary)]/10 border-[var(--primary)]/30 text-[var(--primary)]" : "bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+              Advanced Filters
+            </button>
           </div>
 
-          <div className="flex flex-wrap gap-2 md:gap-4 w-full">
-            <select value={filterEnvironment} onChange={(e) => setFilterEnvironment(e.target.value)} className="flex-1 min-w-[140px] bg-[var(--background)] border border-[var(--border-color)] text-sm rounded-lg px-3 py-2 font-semibold text-[var(--foreground-muted)] focus:outline-none">
-              <option value="ALL">Environment (All)</option>
-              <option value="production">Production</option>
-              <option value="development">Development</option>
+          <div className="flex flex-wrap gap-3 w-full">
+            <select value={filterLevel} onChange={(e) => setFilterLevel(e.target.value)} className="flex-1 min-w-[140px] bg-[var(--background)] border border-[var(--border-color)] text-sm rounded-lg px-3 py-2 font-semibold text-[var(--foreground-muted)] focus:outline-none focus:border-[var(--primary)]">
+              <option value="ALL">Severity (All)</option><option value="INFO">INFO</option><option value="DEBUG">DEBUG</option><option value="WARN">WARN</option><option value="ERROR">ERROR</option><option value="CRITICAL">CRITICAL</option>
             </select>
-
-            <select value={filterService} onChange={(e) => setFilterService(e.target.value)} className="flex-1 min-w-[140px] bg-[var(--background)] border border-[var(--border-color)] text-sm rounded-lg px-3 py-2 font-semibold text-[var(--foreground-muted)] focus:outline-none">
-              <option value="ALL">Service (All)</option>
-              <option value="Website">Website</option>
-              <option value="API">API</option>
-              <option value="AI">AI</option>
-              <option value="Voice">Voice</option>
-              <option value="Pulse">Pulse</option>
+            <select value={filterEnvironment} onChange={(e) => setFilterEnvironment(e.target.value)} className="flex-1 min-w-[140px] bg-[var(--background)] border border-[var(--border-color)] text-sm rounded-lg px-3 py-2 font-semibold text-[var(--foreground-muted)] focus:outline-none focus:border-[var(--primary)]">
+              <option value="ALL">Environment (All)</option><option value="production">Production</option><option value="development">Development</option>
             </select>
-
-            <select value={filterComponent} onChange={(e) => setFilterComponent(e.target.value)} className="flex-1 min-w-[180px] bg-[var(--background)] border border-[var(--border-color)] text-sm rounded-lg px-3 py-2 font-semibold text-[var(--foreground-muted)] focus:outline-none">
+            <select value={filterService} onChange={(e) => setFilterService(e.target.value)} className="flex-1 min-w-[140px] bg-[var(--background)] border border-[var(--border-color)] text-sm rounded-lg px-3 py-2 font-semibold text-[var(--foreground-muted)] focus:outline-none focus:border-[var(--primary)]">
+              <option value="ALL">Service (All)</option><option value="Website">Website</option><option value="API">API</option><option value="AI">AI</option><option value="Voice">Voice</option><option value="Pulse">Pulse</option>
+            </select>
+            <select value={filterComponent} onChange={(e) => setFilterComponent(e.target.value)} className="flex-1 min-w-[180px] bg-[var(--background)] border border-[var(--border-color)] text-sm rounded-lg px-3 py-2 font-semibold text-[var(--foreground-muted)] focus:outline-none focus:border-[var(--primary)]">
               <option value="ALL">Component / API (All)</option>
               <optgroup label="Frontend Components">
-                <option value="Activity Tracker">Activity Tracker</option>
-                <option value="ChatbotWidget">Chatbot Widget</option>
-                <option value="VoiceAgent">Voice Agent</option>
-                <option value="ChatbotSettings">Chatbot Settings</option>
-                <option value="ClientManagement">Client Management</option>
-                <option value="NetworkTracer">Network Tracer</option>
+                <option value="Activity Tracker">Activity Tracker</option><option value="ChatbotWidget">Chatbot Widget</option><option value="VoiceAgent">Voice Agent</option><option value="ClientManagement">Client Management</option>
               </optgroup>
               <optgroup label="Backend APIs">
-                <option value="LogQueryAPI">LogQueryAPI</option>
-                <option value="Generate-Audit-API">Generate-Audit-API</option>
-                <option value="Generate-Email-API">Generate-Email-API</option>
-                <option value="Insight-API">Insight-API</option>
-                <option value="Lead-Terminal-API">Lead-Terminal-API</option>
-                <option value="Login-API">Login-API</option>
-                <option value="Text-Chat-API">Text-Chat-API</option>
-                <option value="Sync-Voice-API">Sync-Voice-API</option>
-                <option value="tts-API">tts-API</option>
+                <option value="Generate-Audit-API">Generate-Audit-API</option><option value="Generate-Email-API">Generate-Email-API</option><option value="Lead-Terminal-API">Lead-Terminal-API</option><option value="Login-API">Login-API</option><option value="Text-Chat-API">Text-Chat-API</option><option value="Sync-Voice-API">Sync-Voice-API</option>
               </optgroup>
             </select>
-
-            <select value={filterLevel} onChange={(e) => setFilterLevel(e.target.value)} className="flex-1 min-w-[140px] bg-[var(--background)] border border-[var(--border-color)] text-sm rounded-lg px-3 py-2 font-semibold text-[var(--foreground-muted)] focus:outline-none">
-              <option value="ALL">Severity (All)</option>
-              <option value="INFO">INFO</option>
-              <option value="DEBUG">DEBUG</option>
-              <option value="WARN">WARN</option>
-              <option value="ERROR">ERROR</option>
-              <option value="CRITICAL">CRITICAL</option>
-            </select>
           </div>
+
+          {/* 🚨 TICKET 18: Advanced Filter Panel */}
+          {showAdvancedFilters && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 mt-2 bg-[var(--background)]/50 border border-[var(--border-color)] rounded-xl animate-acy-fade">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[var(--foreground-muted)] mb-1 block">Start Date</label>
+                <input type="datetime-local" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-full bg-[var(--card-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[var(--foreground-muted)] mb-1 block">End Date</label>
+                <input type="datetime-local" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full bg-[var(--card-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[var(--foreground-muted)] mb-1 block">Session / Convo ID</label>
+                <input type="text" placeholder="lead_12345..." value={filterSessionId} onChange={(e) => setFilterSessionId(e.target.value)} className="w-full bg-[var(--card-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[var(--foreground-muted)] mb-1 block">Correlation Trace ID</label>
+                <input type="text" placeholder="req_..." value={filterCorrelationId} onChange={(e) => setFilterCorrelationId(e.target.value)} className="w-full bg-[var(--card-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[var(--foreground-muted)] mb-1 block">Lead ID</label>
+                <input type="text" placeholder="Target Lead ID" value={filterLeadId} onChange={(e) => setFilterLeadId(e.target.value)} className="w-full bg-[var(--card-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-[var(--foreground-muted)] mb-1 block">Status Code / State</label>
+                <input type="text" placeholder="200, 500, success, failed..." value={filterStatus === "ALL" ? "" : filterStatus} onChange={(e) => setFilterStatus(e.target.value || "ALL")} className="w-full bg-[var(--card-bg)] border border-[var(--border-color)] rounded-lg px-3 py-2 text-xs text-[var(--foreground)] focus:outline-none focus:border-[var(--primary)]" />
+              </div>
+              <div className="col-span-1 md:col-span-2 flex items-end justify-end gap-2">
+                <button onClick={() => { setDateFrom(""); setDateTo(""); setFilterSessionId(""); setFilterCorrelationId(""); setFilterLeadId(""); setFilterStatus("ALL"); }} className="px-4 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--logo-politico-red)] text-xs font-bold rounded-lg transition-colors">Clear Advanced</button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl overflow-hidden shadow-sm">
@@ -281,18 +310,18 @@ export default function SystemLogs() {
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead>
                   <tr className="bg-[var(--background)]/50 border-b border-[var(--border-color)] text-[10px] uppercase tracking-widest text-[var(--foreground-muted)] font-bold">
-                    <th className="px-6 py-4">Timestamp & Env</th>
-                    <th className="px-6 py-4">Level</th>
-                    <th className="px-6 py-4">Service & Component</th>
-                    <th className="px-6 py-4">Event Details</th>
-                    <th className="px-6 py-4 w-1/3">Correlation & Context</th>
+                    <th className="px-6 py-4 w-44">Timestamp & Env</th>
+                    <th className="px-6 py-4 w-32">Level & Svc</th>
+                    <th className="px-6 py-4">Event & Location</th>
+                    <th className="px-6 py-4 w-48">Identifiers</th>
+                    <th className="px-6 py-4 w-64">Outcome & Message</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border-color)]">
                   {paginatedLogs.map((log, index) => {
                     const level = log.level || (log.type === "click" ? "INFO" : "INFO");
                     const service = log.service || "Website";
-                    const eventName = log.event_name || (log.type === "click" ? `Clicked: ${log.text?.substring(0, 20) || "Element"}` : log.type === "page_view" ? `Viewed: ${log.path || log.url || "Page"}` : "System Event");
+                    const eventName = log.event_name || (log.type === "click" ? `Clicked: ${log.text?.substring(0, 20)}` : log.type === "page_view" ? `Viewed: ${log.path}` : "System Event");
                     const eventType = log.event_type || log.type || "user_action";
 
                     // Extracted Phase 2 & 3 Context
@@ -300,122 +329,114 @@ export default function SystemLogs() {
                     const leadId = log.lead_id || log.metadata?.lead_id;
                     const dbPath = log.path || log.metadata?.path;
                     const integration = log.integration_name || log.metadata?.integration_name;
-                    const attemptNum = log.attempt_number || log.metadata?.attempt_number;
-                    const maxAttempts = log.max_attempts || log.metadata?.max_attempts;
+                    const isExpanded = expandedLogId === (log.log_id || log.id || index);
 
                     return (
-                      <tr key={log.log_id || log.id || index} className="hover:bg-[var(--background)] transition-colors">
-                        
-                        <td className="px-6 py-4 flex flex-col gap-0.5">
-                          <span className="text-xs font-mono text-[var(--foreground-muted)]">
-                            {log.timestamp ? new Date(log.timestamp).toLocaleString() : "Unknown Time"}
-                          </span>
-                          <span className={`text-[10px] uppercase font-bold ${log.environment === "development" ? "text-orange-500" : "text-green-500"}`}>
-                            {log.environment || "production"}
-                          </span>
-                        </td>
-
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold border ${getLevelColor(level)}`}>
-                            {level}
-                          </span>
-                        </td>
-
-                        <td className="px-6 py-4 flex flex-col gap-0.5">
-                          <span className="text-xs font-bold text-[var(--foreground)]">{service}</span>
-                          <span className="text-[10px] font-mono text-[var(--foreground-muted)]">{log.component || "Activity Tracker"}</span>
-                          <span className="text-[9px] text-[var(--primary)] uppercase tracking-wider truncate max-w-[150px]">
-                            Path: {log.source_path || log.path || "Global"}
-                          </span>
+                      <React.Fragment key={log.log_id || log.id || index}>
+                        <tr onClick={() => toggleRowExpansion(log.log_id || log.id || index)} className="hover:bg-[var(--background)] transition-colors cursor-pointer group">
                           
-                          {/* 🔥 Phase 2 Badges: Integration & DB Path */}
-                          {integration && <span className="text-[9px] bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded mt-1 max-w-[150px] truncate" title={integration}>API: {integration}</span>}
-                          {dbPath && <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded mt-1 max-w-[150px] truncate" title={dbPath}>DB: {dbPath}</span>}
-                        </td>
+                          <td className="px-6 py-4 flex flex-col gap-0.5">
+                            <span className="text-xs font-mono text-[var(--foreground-muted)]">
+                              {log.timestamp ? new Date(log.timestamp).toLocaleString() : "Unknown Time"}
+                            </span>
+                            <span className={`text-[10px] uppercase font-bold ${log.environment === "development" ? "text-orange-500" : "text-green-500"}`}>
+                              {log.environment || "production"}
+                            </span>
+                          </td>
 
-                        <td className="px-6 py-4 flex flex-col gap-1">
-                          <span className="text-xs font-semibold text-[var(--foreground)] truncate max-w-[200px] flex items-center gap-1.5">
-                            {log.http_method && log.endpoint ? (
-                              <>
-                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${log.http_method === "GET" ? "bg-blue-500/10 text-blue-500" : log.http_method === "POST" ? "bg-green-500/10 text-green-500" : "bg-gray-500/10 text-gray-500"}`}>
-                                  {log.http_method}
-                                </span>
-                                <span className="truncate" title={log.endpoint}>{log.endpoint}</span>
-                              </>
-                            ) : (
-                              <span title={eventName}>{eventName}</span>
-                            )}
-                          </span>
-                          <span className="text-[10px] uppercase text-[var(--foreground-muted)] tracking-wider">{eventType}</span>
-                          
-                          {/* 🔥 Phase 2 Badges: Tool Executions, Lead IDs & Audits */}
-                          {toolName && <span className="text-[9px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded mt-1 max-w-[150px] truncate">Tool: {toolName}</span>}
-                          {leadId && <span className="text-[9px] font-mono text-emerald-500 mt-1">Lead: {leadId.substring(0,14)}...</span>}
-                          
-                          {(log.action_by || log.target_id) && (
-                            <div className="text-[10px] text-[var(--foreground-muted)] mt-1 flex flex-col bg-[var(--background)] p-1.5 border border-[var(--border-color)] rounded">
-                              {log.action_by && <span><b className="text-[var(--foreground)]">By:</b> {log.action_by}</span>}
-                              {log.target_id && <span><b className="text-[var(--foreground)]">Target:</b> {log.target_id}</span>}
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col items-start gap-1">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold border ${getLevelColor(level)}`}>
+                                {level}
+                              </span>
+                              <span className="text-xs font-bold text-[var(--foreground)]">{service}</span>
                             </div>
-                          )}
-                        </td>
+                          </td>
 
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col gap-1 max-w-[300px] truncate">
-                            {log.correlation_id && (
-                              <span className="text-[10px] font-mono text-[var(--accent-blue)]">Trace: {log.correlation_id.substring(0, 18)}...</span>
-                            )}
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col gap-1 max-w-[250px] truncate">
+                              <span className="text-xs font-semibold text-[var(--foreground)] truncate flex items-center gap-1.5" title={log.endpoint || eventName}>
+                                {log.http_method && log.endpoint ? (
+                                  <><span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${log.http_method === "GET" ? "bg-blue-500/10 text-blue-500" : log.http_method === "POST" ? "bg-green-500/10 text-green-500" : "bg-gray-500/10 text-gray-500"}`}>{log.http_method}</span> <span className="truncate">{log.endpoint}</span></>
+                                ) : ( <span>{eventName}</span> )}
+                              </span>
+                              <span className="text-[10px] uppercase text-[var(--foreground-muted)] tracking-wider truncate">{eventType} • {log.component || "Tracker"}</span>
+                              {toolName && <span className="text-[9px] font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded mt-1 w-max">Tool: {toolName}</span>}
+                              {integration && <span className="text-[9px] bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded mt-1 w-max">API: {integration}</span>}
+                              {dbPath && <span className="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded mt-1 w-max truncate max-w-full">DB: {dbPath}</span>}
+                            </div>
+                          </td>
 
-                            {/* 🔥 Phase 3: Display Application Build & Prompt Versions */}
-                            {(log.application_version || log.build_id) && (
-                               <span className="text-[9px] font-mono text-[var(--foreground-muted)] mt-0.5">
-                                 v{log.application_version || "1.0.0"} | Build: {log.build_id?.substring(0,7) || "local"}
-                               </span>
-                            )}
-                            {(log.prompt_version || log.knowledge_version) && (
-                               <span className="text-[9px] font-mono text-fuchsia-400 mt-0.5">
-                                 Prompt: {log.prompt_version?.substring(0,7) || "N/A"} | KB: {log.knowledge_version?.substring(0,7) || "N/A"}
-                               </span>
-                            )}
-
-                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                              {log.status_code && (
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${log.status_code >= 400 ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-green-500/10 text-green-500 border-green-500/20"}`}>
-                                  {log.status_code}
-                                </span>
-                              )}
-                              {log.duration_ms && (
-                                <span className="text-[10px] font-mono text-[var(--foreground-muted)]">⚡ {log.duration_ms}ms</span>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col gap-1 font-mono text-[10px]">
+                              {log.session_id ? (
+                                <span className="text-[var(--primary)] truncate max-w-[180px]" title={log.session_id}>Sess: {log.session_id.substring(0,18)}...</span>
+                              ) : <span className="text-[var(--foreground-muted)]">No Session</span>}
+                              
+                              {log.correlation_id && (
+                                <span className="text-[var(--accent-blue)] truncate max-w-[180px]" title={log.correlation_id}>Trace: {log.correlation_id.substring(0, 18)}...</span>
                               )}
                               
-                              {/* 🔥 Phase 2: Retry Attempts visible inline */}
-                              {attemptNum && (
-                                <span className="text-[9px] bg-orange-500/10 text-orange-500 border border-orange-500/20 px-1.5 py-0.5 rounded">
-                                  Attempt {attemptNum}/{maxAttempts || "?"}
-                                </span>
+                              {leadId && <span className="text-emerald-500 truncate max-w-[180px]" title={leadId}>Lead: {leadId.substring(0,14)}...</span>}
+
+                              {(log.action_by || log.target_id) && (
+                                <div className="mt-1 flex flex-col font-sans">
+                                  {log.action_by && <span><b className="text-[var(--foreground-muted)]">By:</b> <span className="text-[var(--foreground)]">{log.action_by}</span></span>}
+                                  {log.target_id && <span><b className="text-[var(--foreground-muted)]">To:</b> <span className="text-[var(--foreground)] truncate max-w-[120px] inline-block align-bottom">{log.target_id}</span></span>}
+                                </div>
                               )}
                             </div>
+                          </td>
 
-                            {/* 🔥 Phase 3: Deep Voice Turn Metrics */}
-                            {eventName === "turn_metrics_recorded" && log.metadata && (
-                              <div className="flex gap-1.5 mt-1 overflow-hidden">
-                                {log.metadata.stt_latency_ms && <span className="text-[9px] bg-blue-500/10 text-blue-400 px-1 rounded">STT: {log.metadata.stt_latency_ms}ms</span>}
-                                {log.metadata.ai_latency_ms && <span className="text-[9px] bg-purple-500/10 text-purple-400 px-1 rounded">AI: {log.metadata.ai_latency_ms}ms</span>}
-                                {log.metadata.interrupted && <span className="text-[9px] bg-red-500/10 text-red-500 px-1 rounded font-bold">Interrupted</span>}
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col gap-1 max-w-[250px] truncate">
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                {log.status_code && (
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${log.status_code >= 400 ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-green-500/10 text-green-500 border-green-500/20"}`}>
+                                    {log.status_code}
+                                  </span>
+                                )}
+                                {(log.status || log.metadata?.status) && (
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase ${(log.status || log.metadata?.status) === "failed" ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-green-500/10 text-green-500 border-green-500/20"}`}>
+                                    {log.status || log.metadata?.status}
+                                  </span>
+                                )}
+                                {log.duration_ms && (
+                                  <span className="text-[10px] font-mono text-[var(--foreground-muted)]">⚡ {log.duration_ms}ms</span>
+                                )}
                               </div>
-                            )}
-
-                            {log.metadata && activeRole === "SUPERADMIN" && <span className="text-[10px] text-yellow-500 font-bold uppercase mt-1">Has Hidden Metadata</span>}
-                            {!log.metadata && activeRole === "CLIENT" && <span className="text-[9px] text-[var(--foreground-muted)] uppercase tracking-widest opacity-60 mt-1">System Metadata Redacted</span>}
-                            {(log.message || log.error_message) && (
-                              <span className="text-xs text-[var(--foreground)] truncate font-semibold mt-1">
-                                {log.error_message ? `Err: ${log.error_message}` : log.message}
+                              
+                              <span className="text-xs text-[var(--foreground)] truncate font-semibold mt-1" title={log.error_message || log.message}>
+                                {log.error_message ? `Err: ${log.error_message}` : log.message || "Trace Logged"}
                               </span>
-                            )}
-                          </div>
-                        </td>
 
-                      </tr>
+                              {/* Notification Badges */}
+                              {log.metadata && activeRole === "SUPERADMIN" && <span className="text-[9px] text-yellow-500 font-bold uppercase mt-1">Has Hidden Metadata (Click)</span>}
+                              {!log.metadata && activeRole === "CLIENT" && <span className="text-[9px] text-[var(--foreground-muted)] uppercase tracking-widest opacity-60 mt-1">Data Redacted</span>}
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* 🚨 TICKET 18: Expandable Metadata View */}
+                        {isExpanded && (
+                          <tr className="bg-[var(--background)]">
+                            <td colSpan="5" className="px-8 py-6 border-b border-[var(--border-color)] shadow-inner">
+                              <div className="flex justify-between items-center mb-3">
+                                <h4 className="text-xs font-bold text-[var(--foreground-muted)] uppercase tracking-widest">Deep Trace Inspection</h4>
+                                {(log.application_version || log.build_id) && (
+                                  <span className="text-[10px] font-mono text-[var(--accent-blue)] bg-[var(--accent-blue)]/10 px-2 py-1 rounded">
+                                    App v{log.application_version || "1.0.0"} | Build {log.build_id?.substring(0,7) || "local"}
+                                  </span>
+                                )}
+                              </div>
+                              {/* 🔥 Hardcoded the text to gray-200 so it contrasts with the dark background */}
+<pre className="text-[11px] text-gray-200 bg-[#0f1115] border border-gray-800 p-4 rounded-xl overflow-x-auto font-mono whitespace-pre-wrap shadow-inner">
+  {JSON.stringify(log, null, 2)}
+</pre>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
