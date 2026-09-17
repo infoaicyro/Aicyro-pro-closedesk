@@ -1,4 +1,6 @@
 // src/lib/logger.js
+import { processSmartAlert } from "./alertManager"; // 🔥 TICKET 21
+
 export const LOG_LEVELS = {
   DEBUG: "DEBUG",
   INFO: "INFO",
@@ -254,6 +256,9 @@ export class CloseDeskLogger {
     }
 
     this._transmitToCentralDatabase(sanitizedEntry);
+
+    // 🔥 TICKET 21: Evaluate log for smart alerting in the background
+    processSmartAlert(level, event_type, event_name, sanitizedEntry);
   }
 
   debug(type, name, payload) {
