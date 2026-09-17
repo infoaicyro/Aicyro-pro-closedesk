@@ -147,6 +147,7 @@ export default function SystemLogs() {
       if (dateTo && new Date(log.timestamp) > new Date(dateTo)) return false;
 
       if (lowerSearchTerm) {
+        // Includes every metadata field from Phases 1-5
         const searchTarget = [
           log.service, log.component, log.event_type, log.type, log.event_name, log.text,
           log.path, log.url, log.user_id, log.user, log.session_id, log.correlation_id,
@@ -201,7 +202,7 @@ export default function SystemLogs() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // 🚨 TICKET 23: Data Export Logic
+  // Data Export Logic
   const handleExport = (format) => {
     if (activeRole === "CLIENT") {
       alert("Export permission is restricted to authorized administrative roles.");
@@ -234,7 +235,7 @@ export default function SystemLogs() {
           return headers.map(header => {
             let val = log[header] || log.metadata?.[header] || "";
             if (typeof val === "object") val = JSON.stringify(val);
-            return `"${String(val).replace(/"/g, '""')}"`; // Safely escape quotes and newlines
+            return `"${String(val).replace(/"/g, '""')}"`;
           }).join(",");
         });
         
@@ -243,7 +244,6 @@ export default function SystemLogs() {
         fileExtension = "csv";
       }
 
-      // Safely handle large payloads using a Blob
       const blob = new Blob([exportData], { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -370,7 +370,6 @@ export default function SystemLogs() {
                 Filters
               </button>
 
-              {/* 🚨 TICKET 23: Export Buttons (Restricted by Role) */}
               {activeRole !== "CLIENT" && (
                 <div className="flex gap-1 border-l border-[var(--border-color)] pl-2 ml-1">
                   <button 
@@ -478,6 +477,8 @@ export default function SystemLogs() {
                     const leadId = log.lead_id || log.metadata?.lead_id;
                     const dbPath = log.path || log.metadata?.path;
                     const integration = log.integration_name || log.metadata?.integration_name;
+                    const attemptNum = log.attempt_number || log.metadata?.attempt_number;
+                    const maxAttempts = log.max_attempts || log.metadata?.max_attempts;
                     const isExpanded = expandedLogId === (log.log_id || log.id || index);
 
                     return (
@@ -539,6 +540,13 @@ export default function SystemLogs() {
 
                           <td className="px-6 py-4">
                             <div className="flex flex-col gap-1 max-w-[250px] truncate">
+                              
+                              {(log.application_version || log.build_id) && (
+                               <span className="text-[9px] font-mono text-[var(--foreground-muted)] mb-0.5">
+                                 v{log.application_version || "1.0.0"} | Build: {log.build_id?.substring(0,7) || "local"}
+                               </span>
+                              )}
+                              
                               <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                 {log.status_code && (
                                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${log.status_code >= 400 ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-green-500/10 text-green-500 border-green-500/20"}`}>
@@ -553,7 +561,20 @@ export default function SystemLogs() {
                                 {log.duration_ms && (
                                   <span className="text-[10px] font-mono text-[var(--foreground-muted)]">⚡ {log.duration_ms}ms</span>
                                 )}
+                                {attemptNum && (
+                                  <span className="text-[9px] bg-orange-500/10 text-orange-500 border border-orange-500/20 px-1.5 py-0.5 rounded">
+                                    Attempt {attemptNum}/{maxAttempts || "?"}
+                                  </span>
+                                )}
                               </div>
+
+                              {eventName === "turn_metrics_recorded" && log.metadata && (
+                                <div className="flex gap-1.5 mt-1 overflow-hidden">
+                                  {log.metadata.stt_latency_ms && <span className="text-[9px] bg-blue-500/10 text-blue-400 px-1 rounded">STT: {log.metadata.stt_latency_ms}ms</span>}
+                                  {log.metadata.ai_latency_ms && <span className="text-[9px] bg-purple-500/10 text-purple-400 px-1 rounded">AI: {log.metadata.ai_latency_ms}ms</span>}
+                                  {log.metadata.interrupted && <span className="text-[9px] bg-red-500/10 text-red-500 px-1 rounded font-bold">Interrupted</span>}
+                                </div>
+                              )}
                               
                               <span className="text-xs text-[var(--foreground)] truncate font-semibold mt-1" title={log.error_message || log.message}>
                                 {log.error_message ? `Err: ${log.error_message}` : log.message || "Trace Logged"}
@@ -614,6 +635,7 @@ export default function SystemLogs() {
 
                                 <div>
                                   <h5 className="text-[10px] font-bold text-[var(--foreground-muted)] uppercase tracking-wider mb-2">Raw JSON Payload</h5>
+                                  {/* 🔥 Text color explicitly set to gray-200 for dark-mode terminal look */}
                                   <pre className="text-[11px] text-gray-200 bg-[#0f1115] border border-gray-800 p-4 rounded-xl overflow-x-auto font-mono whitespace-pre-wrap shadow-inner">
                                     {JSON.stringify(log, null, 2)}
                                   </pre>

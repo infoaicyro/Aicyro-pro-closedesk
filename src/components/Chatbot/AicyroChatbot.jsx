@@ -86,6 +86,39 @@ const TypewriterBubble = ({ msg, onButtonClick, scrollRef, isProcessing, onSpeak
   useEffect(() => { uiLogger.info("ui_render", "widget_loaded", { context: { message: "Chatbot initialized" } }); }, []);
   useEffect(() => { if (msg.instant) setDisplayedText(msg.text); }, [msg.text, msg.instant]);
 
+  // 🚨 TICKET 25: Global Frontend Error Catcher
+  useEffect(() => {
+    const handleGlobalError = (event) => {
+      // Catch standard JS errors
+      uiLogger.critical("system_event", "frontend_javascript_error", {
+        error: { 
+          message: event.message, 
+          filename: event.filename, 
+          lineno: event.lineno, 
+          colno: event.colno 
+        },
+        context: { message: "Uncaught frontend exception detected" }
+      });
+    };
+
+    const handleUnhandledRejection = (event) => {
+      // Catch failed promises (e.g., silent fetch failures)
+      uiLogger.critical("system_event", "frontend_promise_rejection", {
+        error: { message: String(event.reason) },
+        context: { message: "Unhandled promise rejection detected" }
+      });
+    };
+
+    window.addEventListener("error", handleGlobalError);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener("error", handleGlobalError);
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    };
+  }, []);
+
+
   useEffect(() => {
     if (msg.instant) {
       setIsTypingText(false);
