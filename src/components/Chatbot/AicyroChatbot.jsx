@@ -797,20 +797,33 @@ export default function AicyroChatbot() {
     uiLogger.info("ai_tool", "tool_call_started", { context: { tool_name: "create_booking_and_email", tool_call_id: txId }, metadata: { args: { data, timeText } }});
     uiLogger.info("booking_lifecycle", "booking_creation_started", { context: { session_id: firebaseDbId, target_time: timeText }});
 
+    // Default Fallback Email Content (Used if the webhook fails)
+    let emailSubject = "Your Demo is Confirmed!";
+    let emailBody = `Hi ${data.name || "there"},\n\nYour meeting is confirmed for ${timeText}. We look forward to speaking with you!`;
+    let bookingId = `bk_${txId.substring(0,8)}`;
+
     try {
+      // Attempt to hit the Make.com webhook
       const response = await fetchWithTrace(
         "/api/generate-email",
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: data.name, business_type: data.business_type, time: timeText }) },
         txId,
       );
       
-      if (!response.ok) throw new Error(`API returned status ${response.status}`);
-      
-      const generatedEmail = await response.json();
-      const emailSubject = generatedEmail.subject || "Your Demo is Confirmed!";
-      const emailBody = generatedEmail.body || `Hi ${data.name || "there"},\n\nYour meeting is confirmed for ${timeText}.`;
-      const bookingId = generatedEmail.messageId || `bk_${txId.substring(0,8)}`;
+      if (response.ok) {
+        const generatedEmail = await response.json();
+        emailSubject = generatedEmail.subject || emailSubject;
+        emailBody = generatedEmail.body || emailBody;
+        bookingId = generatedEmail.messageId || bookingId;
+      } else {
+        uiLogger.warn("ai_tool", "email_generation_warning", { context: { message: `Webhook returned status ${response.status}. Using fallback email content.` }});
+      }
+    } catch (error) {
+      uiLogger.warn("ai_tool", "email_generation_network_error", { context: { message: "Could not reach email generation API. Using fallback email content." }, error });
+    }
 
+    try {
+      // 🔥 Proceed with the booking regardless of the email webhook's success
       uiLogger.info("ai_tool", "tool_call_success", { context: { tool_name: "create_booking_and_email", tool_call_id: txId, result_status: "success" }, duration_ms: Date.now() - startTime });
       uiLogger.info("booking_lifecycle", "booking_created", { context: { session_id: firebaseDbId, booking_id: bookingId, target_time: timeText }, duration_ms: Date.now() - startTime });
 
@@ -823,9 +836,9 @@ export default function AicyroChatbot() {
       setIsProcessing(false);
       addBotMessage(`✅ Contact Confirmed!\n\nYour demo is officially booked for ${timeText}. We have securely saved your details and sent a calendar invite to ${data.email || "your email"}.`, [{ label: "Close Chat", value: "close" }], true);
     
-    } catch (error) {
-      uiLogger.error("ai_tool", "tool_call_failed", { error, context: { tool_name: "create_booking_and_email", tool_call_id: txId, result_status: "failed" }, duration_ms: Date.now() - startTime });
-      uiLogger.error("booking_lifecycle", "booking_failed", { error, context: { session_id: firebaseDbId, target_time: timeText }, duration_ms: Date.now() - startTime });
+    } catch (dbError) {
+      // Only throw a fatal Booking Error if the actual database submission fails
+      uiLogger.error("booking_lifecycle", "booking_failed_fatal", { error: dbError, context: { session_id: firebaseDbId, target_time: timeText }});
       
       setIsProcessing(false);
       addBotMessage(`⚠️ Booking Error\n\nSorry, I couldn't secure that calendar slot due to a network error. Please try selecting a different time or contact us directly.`, [], true);
