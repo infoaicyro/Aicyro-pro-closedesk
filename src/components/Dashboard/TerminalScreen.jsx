@@ -69,6 +69,7 @@ export default function LeadScreen({ onLogout }) {
             urgency_level: formattedUrgency,
             conversation_summary: lead.conversation_summary || "",
             full_conversation_transcript: lead.full_conversation_transcript || "",
+            last_inspected_image: lead.last_inspected_image || "", // 🔥 Fetched for the Transcript Image UI
           };
         });
       }
@@ -388,6 +389,7 @@ export default function LeadScreen({ onLogout }) {
                   </div>
                 </section>
 
+                {/* 🔥 TICKET: Render Clean Transcript with Actual Firebase Storage Images */}
                 <section className="bg-gradient-to-b from-[var(--card-gradient-start)] to-[var(--card-gradient-end)] border border-[var(--border-color)] rounded-2xl p-6 shadow-lg">
                   <h3 className="text-xs font-bold text-[var(--foreground-muted)] uppercase tracking-widest mb-4 flex items-center gap-2 border-b border-[var(--border-color)] pb-3">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
@@ -398,9 +400,34 @@ export default function LeadScreen({ onLogout }) {
                       ? selectedLead.full_conversation_transcript.split("\n").map((line, i) => {
                           const isBot = line.startsWith("[BOT]");
                           const isUser = line.startsWith("[USER]");
+                          
+                          let displayText = line;
+                          let renderImage = false;
+
+                          // User Image Logic: Replace ugly text string and flag UI to render actual image
+                          if (isUser && displayText.includes("📷 [Photo submitted for inspection]")) {
+                            displayText = "[USER]: 📷 Image Uploaded";
+                            renderImage = true;
+                          }
+
+                          // Bot Vision Logic: Strip model name (e.g. "(gpt-4o-mini)") and extra asterisks from inspection results
+                          if (isBot && displayText.includes("🔍 **Inspection Result**")) {
+                            displayText = displayText.replace(/\*\*Inspection Result\*\*\s*\([^)]+\):?/i, "Inspection Result:");
+                          }
+
                           return (
                             <div key={i} className={`mb-2 ${isBot ? "text-[var(--primary)]" : isUser ? "text-[var(--foreground)]" : "text-[var(--foreground-muted)]"}`}>
-                              {line}
+                              <div className="whitespace-pre-wrap">{displayText}</div>
+                              {renderImage && selectedLead.last_inspected_image && (
+                                <div className="mt-2.5 mb-3">
+                                  <img 
+                                    src={selectedLead.last_inspected_image} 
+                                    alt="User Inspected Defect" 
+                                    className="w-full max-w-sm max-h-64 object-cover rounded-xl border border-[var(--border-color)] shadow-sm cursor-pointer hover:opacity-90 transition-opacity" 
+                                    onClick={() => window.open(selectedLead.last_inspected_image, "_blank")}
+                                  />
+                                </div>
+                              )}
                             </div>
                           );
                         })
@@ -433,4 +460,4 @@ export default function LeadScreen({ onLogout }) {
       <style dangerouslySetInnerHTML={{ __html: `.fade-in { animation: fadeIn 0.4s ease-out forwards; } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } .custom-scrollbar::-webkit-scrollbar { width: 5px; } .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } .custom-scrollbar::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--foreground-muted); }`}} />
     </main>
   );
-}
+} 

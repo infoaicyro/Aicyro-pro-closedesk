@@ -3,8 +3,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { logToFirebase, queueEmailAlert } from "../../lib/notificationHelper";
-import { db } from "../../lib/firebase";
+import { db, storage } from "../../lib/firebase";
 import { ref, get } from "firebase/database";
+import { ref as storageRef, uploadString, getDownloadURL } from "firebase/storage";
 import { trackChatOpened, trackConversationStarted } from "../../lib/activityTracker";
 import { getOrCreateAnonId } from "../../lib/cookiePersonalization";
 
@@ -70,6 +71,43 @@ const generateTimeSlots = () => {
   return slots;
 };
 
+// Client-side image compression
+async function compressImage(file, maxDimension = 1024, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxDimension) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          }
+        } else {
+          if (height > maxDimension) {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+}
+
 const STEPS = {
   WELCOME: "WELCOME", AI_CHAT_MODE: "AI_CHAT_MODE", CHOOSE_PATH: "CHOOSE_PATH",
   SELECT_DATE: "SELECT_DATE", SELECT_TIME: "SELECT_TIME", CONFIRM_BOOKING: "CONFIRM_BOOKING", FINAL_CTA: "FINAL_CTA",
@@ -86,23 +124,14 @@ const TypewriterBubble = ({ msg, onButtonClick, scrollRef, isProcessing, onSpeak
   useEffect(() => { uiLogger.info("ui_render", "widget_loaded", { context: { message: "Chatbot initialized" } }); }, []);
   useEffect(() => { if (msg.instant) setDisplayedText(msg.text); }, [msg.text, msg.instant]);
 
-  // 🚨 TICKET 25: Global Frontend Error Catcher
   useEffect(() => {
     const handleGlobalError = (event) => {
-      // Catch standard JS errors
       uiLogger.critical("system_event", "frontend_javascript_error", {
-        error: { 
-          message: event.message, 
-          filename: event.filename, 
-          lineno: event.lineno, 
-          colno: event.colno 
-        },
+        error: { message: event.message, filename: event.filename, lineno: event.lineno, colno: event.colno },
         context: { message: "Uncaught frontend exception detected" }
       });
     };
-
     const handleUnhandledRejection = (event) => {
-      // Catch failed promises (e.g., silent fetch failures)
       uiLogger.critical("system_event", "frontend_promise_rejection", {
         error: { message: String(event.reason) },
         context: { message: "Unhandled promise rejection detected" }
@@ -111,13 +140,11 @@ const TypewriterBubble = ({ msg, onButtonClick, scrollRef, isProcessing, onSpeak
 
     window.addEventListener("error", handleGlobalError);
     window.addEventListener("unhandledrejection", handleUnhandledRejection);
-
     return () => {
       window.removeEventListener("error", handleGlobalError);
       window.removeEventListener("unhandledrejection", handleUnhandledRejection);
     };
   }, []);
-
 
   useEffect(() => {
     if (msg.instant) {
@@ -196,7 +223,17 @@ export default function AicyroChatbot() {
   const voiceCallRef = useRef(null);
   const activeResponseRef = useRef(false);
   const [isListening, setIsListening] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+
+  // 🔥 Vision / WebRTC Camera States
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [showWebcam, setShowWebcam] = useState(false);
+  
+  const fileGalleryInputRef = useRef(null);
+  const videoRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+  
   const recognitionRef = useRef(null);
   const abortControllerRef = useRef(null);
   const baseInputRef = useRef("");
@@ -207,6 +244,125 @@ export default function AicyroChatbot() {
     if (voiceCallRef.current && voiceCallRef.current.audioEl) voiceCallRef.current.audioEl.muted = isMuted;
     if (isMuted) stopSpeech();
   }, [isMuted]);
+
+  // --- WebRTC Camera Setup for "Take a Photo" ---
+  const openWebcam = async () => {
+    setShowImagePicker(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: "environment" } 
+      });
+      cameraStreamRef.current = stream;
+      setShowWebcam(true);
+    } catch (err) {
+      uiLogger.error("camera", "permission_denied", { error: err });
+      alert("Camera access denied or unavailable. Please check your browser permissions to take a photo.");
+    }
+  };
+
+  const closeWebcam = () => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach(track => track.stop());
+      cameraStreamRef.current = null;
+    }
+    setShowWebcam(false);
+  };
+
+  useEffect(() => {
+    if (showWebcam && videoRef.current && cameraStreamRef.current) {
+      videoRef.current.srcObject = cameraStreamRef.current;
+    }
+  }, [showWebcam]);
+
+  const capturePhotoFromWebcam = () => {
+    if (!videoRef.current) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    const base64Data = canvas.toDataURL("image/jpeg", 0.75);
+
+    closeWebcam();
+    processBase64Image(base64Data);
+  };
+  // ---------------------------------------------
+
+  // --- Shared Vision Processing Logic ---
+  const processBase64Image = async (base64Jpeg) => {
+    setIsUploadingImage(true);
+    setIsProcessing(true);
+
+    try {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "user",
+          text: "📷 Image Uploaded",
+          imageUrl: base64Jpeg,
+          id: Date.now(),
+        }
+      ]);
+
+      const imagePath = `chat_images/${firebaseDbIdRef.current}/${Date.now()}.jpg`;
+      const fileRef = storageRef(storage, imagePath);
+      await uploadString(fileRef, base64Jpeg, "data_url");
+      const downloadURL = await getDownloadURL(fileRef);
+
+      const txId = generateCorrelationId();
+      const response = await fetchWithTrace(
+        "/api/analyze-image",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: firebaseDbIdRef.current,
+            image_url: downloadURL,
+            user_prompt: "Identify the problem, severity, and recommend next steps."
+          }),
+        },
+        txId
+      );
+
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || "Vision analysis failed");
+
+      const visionData = result.data;
+
+      // 🔥 ONLY update lead state if the image was actually relevant
+      if (!visionData.is_irrelevant) {
+        setLeadData((prev) => ({
+          ...prev,
+          business_problem: visionData.identified_issue || prev.business_problem,
+          urgency_level: visionData.urgency_level || prev.urgency_level,
+        }));
+      }
+
+      const shortcuts = (visionData.suggested_shortcuts || ["Book Inspection", "Request Callback"]).map((s) => ({
+        label: s,
+        value: `shortcut_${s}`
+      }));
+
+      addBotMessage(visionData.reply, shortcuts);
+
+    } catch (err) {
+      uiLogger.error("ai_vision", "client_upload_failed", { error: err });
+      addBotMessage("Sorry, I had trouble processing that image. Please try uploading again or describe the issue in text.", []);
+    } finally {
+      setIsUploadingImage(false);
+      setIsProcessing(false);
+      if (fileGalleryInputRef.current) fileGalleryInputRef.current.value = "";
+    }
+  };
+
+  const handleGallerySelected = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setShowImagePicker(false);
+    const base64Jpeg = await compressImage(file);
+    processBase64Image(base64Jpeg);
+  };
+  // ---------------------------------------------
 
   const resetTurnMetrics = () => {
     turnMetricsRef.current = { turn_id: Date.now().toString(), speech_start: null, speech_stop: null, response_created: null, stt_completed: null, first_audio: null, response_done: null, interrupted: false, tools: [] };
@@ -625,7 +781,6 @@ export default function AicyroChatbot() {
 
   function handleCloseChat() { uiLogger.info("user_action", "widget_closed"); stopSpeech(); if (voiceState !== "IDLE" && voiceState !== "ERROR") handleEndVoiceCall(); submitLead({ ...leadDataRef.current, conversation_ended_at: new Date().toISOString() }); setMessages((prev) => prev.map((m) => ({ ...m, instant: true, spoken: true }))); setIsOpen(false); }
 
-  // 🚨 TICKET 10: Booking Requested
   function triggerConfirmation(finalData) {
     setStep(STEPS.CONFIRM_BOOKING);
     uiLogger.info("booking_lifecycle", "booking_requested", { context: { session_id: firebaseDbId, target_time: finalData.display_time }});
@@ -635,14 +790,11 @@ export default function AicyroChatbot() {
     );
   }
 
-  // 🚨 TICKET 10: Strict Backend Success Validation before telling User they are confirmed!
   async function generateAndSendWebhook(data, timeText) {
     const txId = generateCorrelationId();
     const startTime = Date.now();
     
-    // Ticket 7
     uiLogger.info("ai_tool", "tool_call_started", { context: { tool_name: "create_booking_and_email", tool_call_id: txId }, metadata: { args: { data, timeText } }});
-    // Ticket 10
     uiLogger.info("booking_lifecycle", "booking_creation_started", { context: { session_id: firebaseDbId, target_time: timeText }});
 
     try {
@@ -675,10 +827,9 @@ export default function AicyroChatbot() {
       uiLogger.error("ai_tool", "tool_call_failed", { error, context: { tool_name: "create_booking_and_email", tool_call_id: txId, result_status: "failed" }, duration_ms: Date.now() - startTime });
       uiLogger.error("booking_lifecycle", "booking_failed", { error, context: { session_id: firebaseDbId, target_time: timeText }, duration_ms: Date.now() - startTime });
       
-      // 🚨 TICKET 10 CRITERIA: User ONLY receives success after successful backend result!
       setIsProcessing(false);
       addBotMessage(`⚠️ Booking Error\n\nSorry, I couldn't secure that calendar slot due to a network error. Please try selecting a different time or contact us directly.`, [], true);
-      setStep(STEPS.AI_CHAT_MODE); // Return them to chat mode so they aren't stuck
+      setStep(STEPS.AI_CHAT_MODE); 
     }
   }
 
@@ -973,6 +1124,21 @@ export default function AicyroChatbot() {
               </div>
             )}
 
+            {/* 🔥 WebRTC Camera UI Overlay */}
+            {showWebcam && (
+              <div className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center animate-acy-fade">
+                <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                
+                <div className="absolute bottom-8 left-0 right-0 flex justify-center items-center gap-8 px-6 pb-[env(safe-area-inset-bottom)]">
+                  <button onClick={closeWebcam} className="px-5 py-3.5 bg-white/20 text-white rounded-full backdrop-blur-md font-bold text-sm hover:bg-white/30 transition-colors">
+                    Cancel
+                  </button>
+                  <button onClick={capturePhotoFromWebcam} className="w-16 h-16 bg-white border-[6px] border-[var(--primary)] rounded-full shadow-[0_0_20px_var(--primary)] hover:scale-105 active:scale-95 transition-all">
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto overscroll-contain acy-scroll relative">
               {agentMode === "text" ? (
                 <div className="px-4 py-5 flex flex-col gap-5 bg-[var(--background)] min-h-full">
@@ -1001,7 +1167,16 @@ export default function AicyroChatbot() {
                     }
                     return (
                       <div key={msg.id} className="flex flex-col gap-1.5 max-w-[85%] self-end animate-acy-fade">
-                        <div className="px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap bg-[var(--primary)] text-white rounded-2xl rounded-br-sm shadow-sm">{msg.text}</div>
+                        <div className="px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap bg-[var(--primary)] text-white rounded-2xl rounded-br-sm shadow-sm">
+                          {msg.imageUrl && (
+                            <img
+                              src={msg.imageUrl}
+                              alt="Uploaded problem"
+                              className="w-full max-h-48 object-cover rounded-xl mb-2 border border-white/20"
+                            />
+                          )}
+                          {msg.text}
+                        </div>
                       </div>
                     );
                   })}
@@ -1064,15 +1239,60 @@ export default function AicyroChatbot() {
 
             <div className="p-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] sm:pb-3 bg-[var(--background)] border-t border-[var(--border-color)] shrink-0 z-20">
               {[STEPS.AI_CHAT_MODE].includes(step) ? (
-                <form className="flex items-center gap-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-full pl-4 pr-1.5 py-1.5 focus-within:border-[var(--primary)] transition-all" onSubmit={handleTextInput}>
-                  <button type="button" onClick={toggleListening} className={`p-1.5 rounded-full transition-all outline-none ${isListening ? "bg-red-500 text-white animate-pulse" : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`} title={isListening ? "Stop listening" : "Speak to type"}>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 016 0v6a3 3 0 01-3 3z" /></svg>
-                  </button>
-                  <input ref={inputRef} disabled={agentMode === "text" && isProcessing} onClick={handleInputInteraction} onFocus={handleInputInteraction} className="flex-1 bg-transparent text-[var(--foreground)] text-[14px] outline-none placeholder:text-[var(--foreground-muted)] disabled:opacity-50 py-1.5" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder={isListening ? "Listening..." : "Type or speak..."} />
-                  <button type="submit" disabled={!inputValue.trim() || (agentMode === "text" && isProcessing)} className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--primary)] text-white transition-all disabled:opacity-50 disabled:scale-100 hover:scale-105 outline-none">
-                    <svg className="w-4 h-4 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" /></svg>
-                  </button>
-                </form>
+                <>
+                  <input type="file" ref={fileGalleryInputRef} accept="image/*" className="hidden" onChange={handleGallerySelected} />
+
+                  <form className="relative flex items-center gap-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-full pl-3 pr-1.5 py-1.5 focus-within:border-[var(--primary)] transition-all" onSubmit={handleTextInput}>
+                    
+                    <button
+                      type="button"
+                      onClick={() => setShowImagePicker(!showImagePicker)}
+                      disabled={isUploadingImage || isProcessing}
+                      className="p-1.5 rounded-full text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--background)] transition-all outline-none relative"
+                      title="Send Photo of the Issue"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      {showImagePicker && (
+                        <div className="absolute bottom-14 left-0 bg-[var(--card-bg)] border border-[var(--border-color)] shadow-2xl rounded-2xl p-2 flex flex-col gap-1 z-50 min-w-[200px] animate-acy-spring origin-bottom-left">
+                          <div
+                            onClick={(e) => { e.stopPropagation(); openWebcam(); }}
+                            className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--background)] rounded-xl transition-colors text-left w-full"
+                          >
+                            <span>📸</span> Take a Photo
+                          </div>
+                          <div
+                            onClick={(e) => { e.stopPropagation(); setShowImagePicker(false); fileGalleryInputRef.current?.click(); }}
+                            className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--background)] rounded-xl transition-colors text-left w-full"
+                          >
+                            <span>🖼️</span> Upload from Gallery
+                          </div>
+                        </div>
+                      )}
+                    </button>
+
+                    <button type="button" onClick={toggleListening} className={`p-1.5 rounded-full transition-all outline-none ${isListening ? "bg-red-500 text-white animate-pulse" : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`} title={isListening ? "Stop listening" : "Speak to type"}>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 016 0v6a3 3 0 01-3 3z" /></svg>
+                    </button>
+
+                    <input
+                      ref={inputRef}
+                      disabled={agentMode === "text" && (isProcessing || isUploadingImage)}
+                      onClick={handleInputInteraction}
+                      onFocus={handleInputInteraction}
+                      className="flex-1 bg-transparent text-[var(--foreground)] text-[14px] outline-none placeholder:text-[var(--foreground-muted)] disabled:opacity-50 py-1.5"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      placeholder={isUploadingImage ? "Uploading & diagnosing..." : isListening ? "Listening..." : "Type, snap photo, or speak..."}
+                    />
+
+                    <button type="submit" disabled={!inputValue.trim() || (agentMode === "text" && isProcessing)} className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--primary)] text-white transition-all disabled:opacity-50 disabled:scale-100 hover:scale-105 outline-none">
+                      <svg className="w-4 h-4 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" /></svg>
+                    </button>
+                  </form>
+                </>
               ) : (
                 <div className="w-full text-center py-2 flex items-center justify-center gap-1.5">
                   <svg className="w-3.5 h-3.5 text-[var(--foreground-muted)]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 4.5l6.5 13.5h-13L12 6.5z" /></svg>
