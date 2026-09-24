@@ -3,13 +3,17 @@ const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 
-admin.initializeApp();
+// Initialize Firebase Admin if not already done
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+
 const db = admin.database();
 
 /**
  * 🔥 DYNAMIC TRANSPORTER GENERATOR
  * Fetches SMTP credentials from the Realtime Database configured in the Dashboard UI.
- * Falls back to local .env variables if the user hasn't configured it yet.
+ * Supports Microsoft OAuth2, Google OAuth2, Custom SMTP, and App Passwords.
  */
 async function getDynamicTransporter() {
   const snap = await db.ref("settings/email_config").once("value");
@@ -18,28 +22,73 @@ async function getDynamicTransporter() {
   const userEmail = config.smtpEmail || process.env.GMAIL_EMAIL;
   const userPass = config.smtpPassword || process.env.GMAIL_PASSWORD;
   const senderName = config.senderName || "Aicyro Pulse";
+  const provider = config.provider || "gmail";
 
-  if (!userEmail || !userPass) {
-    throw new Error("SMTP credentials are not configured in the Dashboard or Environment Variables.");
+  let transportConfig;
+
+  if (provider === "microsoft" && config.refreshToken) {
+    // 🔐 Microsoft Modern Auth (OAuth2)
+    transportConfig = {
+      host: "smtp-mail.outlook.com", // Explicitly use the Outlook.com SMTP server
+      port: 587,
+      secure: false, // Must be false for STARTTLS on port 587
+      auth: {
+        type: "OAuth2",
+        user: userEmail,
+        clientId: config.clientId || process.env.MICROSOFT_CLIENT_ID,
+        clientSecret: config.clientSecret || process.env.MICROSOFT_CLIENT_SECRET,
+        refreshToken: config.refreshToken,
+        // 🔥 CRITICAL: Force Nodemailer to use Microsoft's token endpoint instead of Google's
+        accessUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token", 
+      },
+    };
+  } else if (provider === "google_oauth" || (provider !== "microsoft" && config.refreshToken)) {
+    // 🔐 Google Modern Auth (OAuth2)
+    transportConfig = {
+      service: "gmail",
+      auth: {
+        type: "OAuth2",
+        user: userEmail,
+        clientId: config.clientId || process.env.GOOGLE_CLIENT_ID,
+        clientSecret: config.clientSecret || process.env.GOOGLE_CLIENT_SECRET,
+        refreshToken: config.refreshToken,
+      },
+    };
+  } else if (provider === "custom" && config.smtpHost) {
+    // 🏢 Custom Company SMTP
+    const port = parseInt(config.smtpPort) || 465;
+    transportConfig = {
+      host: config.smtpHost,
+      port: port,
+      secure: port === 465,
+      auth: {
+        user: userEmail,
+        pass: userPass,
+      },
+    };
+  } else {
+    // ✉️ Google Basic / App Password fallback
+    transportConfig = {
+      service: "gmail",
+      auth: {
+        user: userEmail,
+        pass: userPass,
+      },
+    };
   }
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: userEmail,
-      pass: userPass,
-    },
-  });
+  const transporter = nodemailer.createTransport(transportConfig);
 
   return { transporter, userEmail, senderName };
 }
 
+
 // ============================================================================
-// SVG LOGO ATTACHMENT (Optimized for Email Clients)
+// SVG LOGO (Optimized for Email Clients - Injected directly into HTML)
 // ============================================================================
 const COMPANY_LOGO_SVG = `<?xml version="1.0" encoding="utf-8"?>
 <svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
-     viewBox="0 0 1920 537.19" style="enable-background:new 0 0 1920 537.19;" xml:space="preserve">
+     viewBox="0 0 1920 537.19" style="height: 48px; width: auto; display: block; margin: 0 auto; enable-background:new 0 0 1920 537.19;" xml:space="preserve">
 <g>
     <path fill="#0B1E48" d="M333.16,38.06c-29.28,51.04-58.51,102.11-87.85,153.11c-22.81,39.67-45.75,79.26-69.56,120.48
         c-3.43-6.81-6.27-12.54-9.19-18.23C127.07,216.23,87.7,138.99,47.88,61.97c-4.15-8.03-2.61-15.9-3.26-23.91
@@ -96,14 +145,6 @@ const COMPANY_LOGO_SVG = `<?xml version="1.0" encoding="utf-8"?>
 </g>
 </svg>`;
 
-const emailAttachments = [
-  {
-    filename: "logo.svg",
-    content: COMPANY_LOGO_SVG,
-    contentType: "image/svg+xml",
-    cid: "company-logo",
-  },
-];
 
 // ============================================================================
 // 1. MAIN ALERT & QUEUE FUNCTION (Runs when a lead is captured)
@@ -162,7 +203,7 @@ exports.sendEmailAlert = functions.database
         <div style="background-color: #f4f4f5; padding: 40px 20px; font-family: 'Helvetica Neue', Arial, sans-serif;">
           <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e2e5; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(11,2,25,0.05);">
             <div style="text-align: center; padding: 20px; border-bottom: 3px solid #8a2be2;">
-              <img src="cid:company-logo" alt="Company Logo" style="height: 48px; width: auto; display: block; margin: 0 auto;" />
+              ${COMPANY_LOGO_SVG}
             </div>
             <div style="padding: 30px; text-align: center;">
               <h2 style="color: #0b0219; margin: 0 0 10px; font-size: 22px;">New Chat Started</h2>
@@ -184,7 +225,7 @@ exports.sendEmailAlert = functions.database
         <div style="background-color: #f4f4f5; padding: 40px 20px; font-family: 'Helvetica Neue', Arial, sans-serif;">
           <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e2e5; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(11,2,25,0.05);">
             <div style="text-align: center; padding: 20px; border-bottom: 3px solid #8a2be2;">
-              <img src="cid:company-logo" alt="Company Logo" style="height: 48px; width: auto; display: block; margin: 0 auto;" />
+              ${COMPANY_LOGO_SVG}
             </div>
             ${urgencyHtml}
             <div style="padding: 30px;">
@@ -216,7 +257,6 @@ exports.sendEmailAlert = functions.database
         to: receiverEmail,
         subject: title,
         html: htmlContent,
-        attachments: emailAttachments,
       });
 
       if (data.visitor_email_config && data.visitor_email_config.visitorEmail) {
@@ -231,7 +271,7 @@ exports.sendEmailAlert = functions.database
           <div style="background-color: #f4f4f5; padding: 40px 20px; font-family: 'Helvetica Neue', Arial, sans-serif;">
             <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e2e5; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(11,2,25,0.05);">
               <div style="text-align: center; padding: 30px 20px 20px; border-bottom: 3px solid #8a2be2;">
-                <img src="cid:company-logo" alt="Company Logo" style="height: 48px; width: auto; display: block; margin: 0 auto;" />
+                ${COMPANY_LOGO_SVG}
               </div>
               <div style="padding: 30px 30px 10px; text-align: center;">
                 <h2 style="color: #0b0219; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;">${finalSubject}</h2>
@@ -253,7 +293,6 @@ exports.sendEmailAlert = functions.database
           bcc: receiverEmail,
           subject: finalSubject,
           html: visitorHtml,
-          attachments: emailAttachments,
         });
 
         if (lead.preferred_date && lead.preferred_time) {
@@ -358,7 +397,7 @@ exports.processScheduledReminders = functions.pubsub
         <div style="background-color: #f4f4f5; padding: 40px 20px; font-family: 'Helvetica Neue', Arial, sans-serif;">
           <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e2e5; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(11,2,25,0.05);">
             <div style="text-align: center; padding: 30px 20px 20px; border-bottom: 3px solid #8a2be2;">
-              <img src="cid:company-logo" alt="Company Logo" style="height: 48px; width: auto; display: block; margin: 0 auto;" />
+              ${COMPANY_LOGO_SVG}
             </div>
             <div style="padding: 30px 30px 40px; line-height: 1.7; font-size: 15px; color: #4a4a6a;">
               ${htmlBody}
@@ -376,7 +415,6 @@ exports.processScheduledReminders = functions.pubsub
         replyTo: userEmail,
         subject: subject,
         html: emailHtml,
-        attachments: emailAttachments,
       };
 
       const sendPromise = transporter
