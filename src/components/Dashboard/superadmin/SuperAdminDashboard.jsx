@@ -1,9 +1,10 @@
+// src/components/Dashboard/superadmin/SuperAdminDashboard.jsx
 "use client";
 
 import React, { useState } from "react";
 import ClientManagement from "./ClientManagement";
-// --- UPDATED IMPORT PATH FOR APPEARANCE ---
 import SuperAdminAppearance from "./Settings/SuperAdminAppearance";
+import SuperAdminEmailProtocol from "./Settings/SuperAdminEmailProtocol";
 
 export default function SuperAdminDashboard({ onLogout }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -14,7 +15,7 @@ export default function SuperAdminDashboard({ onLogout }) {
     setActiveView(view);
     setIsSidebarOpen(false);
 
-    if (view === "appearance") {
+    if (view === "appearance" || view === "email_protocol") {
       setIsSettingsExpanded(true);
     }
   };
@@ -108,30 +109,6 @@ export default function SuperAdminDashboard({ onLogout }) {
             Clients
           </button>
 
-          {/* <button
-            onClick={() => handleNavClick("billing")}
-            className={`flex items-center gap-4 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all duration-200 group ${
-              activeView === "billing"
-                ? "bg-[var(--primary)]/10 text-[var(--primary)] border border-[var(--primary)]/20 shadow-[0_0_15px_var(--lead-glow)]"
-                : "text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--background)] border border-transparent"
-            }`}
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
-              />
-            </svg>
-            Master Billing
-          </button> */}
-
           <div className="mt-4 pt-4 border-t border-[var(--border-color)]">
             <button
               onClick={() => setIsSettingsExpanded(!isSettingsExpanded)}
@@ -179,9 +156,19 @@ export default function SuperAdminDashboard({ onLogout }) {
             </button>
 
             <div
-              className={`overflow-hidden transition-all duration-300 ease-in-out ${isSettingsExpanded ? "max-h-32 opacity-100 mt-2" : "max-h-0 opacity-0"}`}
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${isSettingsExpanded ? "max-h-48 opacity-100 mt-2" : "max-h-0 opacity-0"}`}
             >
               <div className="flex flex-col gap-1 pl-4 ml-6 border-l border-[var(--border-color)]">
+              <button
+                  onClick={() => handleNavClick("email_protocol")}
+                  className={`text-left px-4 py-2.5 rounded-r-xl text-xs font-medium transition-all ${
+                    activeView === "email_protocol"
+                      ? "bg-[var(--primary)]/10 text-[var(--primary)] border-l-2 border-[var(--primary)]"
+                      : "text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--background)] border-l-2 border-transparent"
+                  }`}
+                >
+                  Notifications Settings
+                </button>
                 <button
                   onClick={() => handleNavClick("appearance")}
                   className={`text-left px-4 py-2.5 rounded-r-xl text-xs font-medium transition-all ${
@@ -192,6 +179,7 @@ export default function SuperAdminDashboard({ onLogout }) {
                 >
                   Appearance
                 </button>
+                
               </div>
             </div>
           </div>
@@ -275,6 +263,8 @@ export default function SuperAdminDashboard({ onLogout }) {
               <ClientManagement />
             ) : activeView === "appearance" ? (
               <SuperAdminAppearance />
+            ) : activeView === "email_protocol" ? (
+              <SuperAdminEmailProtocol />
             ) : (
               <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl p-12 flex flex-col items-center justify-center min-h-[400px] text-center shadow-sm">
                 <h2 className="text-2xl font-black text-[var(--foreground)] mb-2 capitalize">

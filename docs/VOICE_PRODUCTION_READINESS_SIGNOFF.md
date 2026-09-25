@@ -72,17 +72,17 @@ To proceed with the production launch, all criteria below must be met and signed
 **Quality Assurance (QA) Lead**
 _I verify that the regression suite has passed and no blocking defects exist._
 
-- **Name:** \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
-- **Date:** \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
-- **Signature:** \***\*\*\*\*\***\_\_\_\_\***\*\*\*\*\***
+- **Name:**
+- **Date:**
+- **Signature:**
 
 **Product Owner (PO)**
 _I accept the listed limitations and approve the Voice AI behavior for production prospects._
 
-- **Name:** \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
-- **Date:** \***\*\*\*\*\*\*\***\_\_\_\***\*\*\*\*\*\*\***
-- **Signature:** \***\*\*\*\*\***\_\_\_\_\***\*\*\*\*\***
+- **Name:**
+- **Date:**
+- **Signature:**
 
 ---
 
-_Once signed, Dev/Ops is authorized to set `"voiceEnabled": true` in the production Firebase configuration._
+_Once signed, Dev/Ops is authorized to set_ `"voiceEnabled": true` _in the production Firebase configuration._
