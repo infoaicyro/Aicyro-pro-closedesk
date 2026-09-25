@@ -37,10 +37,10 @@ Ops
 
 Two policy documents drive the AI:
 
-| Policy | File | Version |
-|---|---|---|
-| Text + voice front desk | `src/lib/ruleBook.js` | `2.11.0` (merged with `settings/chatbot_config`, including `voiceEnabled`) |
-| Image diagnostics | `src/lib/visionRuleBook.js` | `1.1.0` (`gpt-4o-mini`) |
+| Policy                  | File                        | Version                                                                    |
+| ----------------------- | --------------------------- | -------------------------------------------------------------------------- |
+| Text + voice front desk | `src/lib/ruleBook.js`       | `2.11.0` (merged with `settings/chatbot_config`, including `voiceEnabled`) |
+| Image diagnostics       | `src/lib/visionRuleBook.js` | `1.1.0` (`gpt-4o-mini`)                                                    |
 
 ---
 
@@ -148,51 +148,51 @@ Dashboard/superadmin/Settings/SuperAdminAppearance.jsx
 
 ### 3.1 npm — Next.js app (`package.json`)
 
-| Package | Role in this repo |
-|---|---|
-| `next` ^16.1.6 | Pages router, API routes, build |
-| `react` / `react-dom` ^19.2.4 | UI |
-| `firebase` ^12.13.0 | Client RTDB + **Storage** (`getStorage` in `src/lib/firebase.js`) |
-| `openai` ^6.37.0 | Chat Completions, Vision (`image_url`), Realtime client secrets |
-| `@aws-sdk/client-polly` | `/api/tts` MP3 synthesis for dashboard voice preview |
-| `@aws-sdk/client-transcribe` | Declared; **not imported** by application source |
-| `formidable` | Declared; **not used** (`upload-logo.js` is a misplaced token mint) |
-| `framer-motion` | Landing motion (`Home/OLD/DoneForYou` and similar) |
-| `jspdf` | PDF export on `/free-website-audit` |
-| `lucide-react` | Icons |
-| `react-hot-toast` | Still in package.json; notification settings now use a custom toast |
-| `react-simple-maps` | CookieDataDisplay geo visualization |
-| `recharts` | Insight charts |
-| `tailwindcss` + `postcss` + `autoprefixer` | Styling |
-| `eslint` + `eslint-config-next` | Lint |
+| Package                                    | Role in this repo                                                   |
+| ------------------------------------------ | ------------------------------------------------------------------- |
+| `next` ^16.1.6                             | Pages router, API routes, build                                     |
+| `react` / `react-dom` ^19.2.4              | UI                                                                  |
+| `firebase` ^12.13.0                        | Client RTDB + **Storage** (`getStorage` in `src/lib/firebase.js`)   |
+| `openai` ^6.37.0                           | Chat Completions, Vision (`image_url`), Realtime client secrets     |
+| `@aws-sdk/client-polly`                    | `/api/tts` MP3 synthesis for dashboard voice preview                |
+| `@aws-sdk/client-transcribe`               | Declared; **not imported** by application source                    |
+| `formidable`                               | Declared; **not used** (`upload-logo.js` is a misplaced token mint) |
+| `framer-motion`                            | Landing motion (`Home/OLD/DoneForYou` and similar)                  |
+| `jspdf`                                    | PDF export on `/free-website-audit`                                 |
+| `lucide-react`                             | Icons                                                               |
+| `react-hot-toast`                          | Still in package.json; notification settings now use a custom toast |
+| `react-simple-maps`                        | CookieDataDisplay geo visualization                                 |
+| `recharts`                                 | Insight charts                                                      |
+| `tailwindcss` + `postcss` + `autoprefixer` | Styling                                                             |
+| `eslint` + `eslint-config-next`            | Lint                                                                |
 
 Path alias: `@/*` → `./src/*` (`jsconfig.json`). `.npmrc` sets `legacy-peer-deps=true`.
 
 ### 3.2 npm — Cloud Functions (`functions/package.json`)
 
-| Package | Role |
-|---|---|
-| `firebase-functions` v1 | RTDB `onCreate`, Pub/Sub schedule |
-| `firebase-admin` | Server RTDB |
-| `nodemailer` | Gmail SMTP (credentials from RTDB or env) |
+| Package                 | Role                                      |
+| ----------------------- | ----------------------------------------- |
+| `firebase-functions` v1 | RTDB `onCreate`, Pub/Sub schedule         |
+| `firebase-admin`        | Server RTDB                               |
+| `nodemailer`            | Gmail SMTP (credentials from RTDB or env) |
 
 Engine: Node 20. Firebase project: `aichatbot-a6217` (`.firebaserc`).
 
 ### 3.3 Hosted / HTTP services
 
-| Service | Used by |
-|---|---|
-| Firebase Realtime Database | APIs, dashboard, chatbot, Cloud Functions |
-| Firebase Storage | Chatbot uploads `chat_images/{session_id}/{timestamp}.jpg` |
-| OpenAI Chat Completions | `/api/chat`, `/api/leads` (abandoned summary), `/api/insights`, `/api/generate-audit` |
-| OpenAI Vision | `/api/analyze-image` (`gpt-4o-mini`, `detail: "low"`) |
-| OpenAI Realtime `client_secrets` | `/api/openai-token` |
-| OpenAI TTS (script) | `scripts/voice_qa_harness.js` |
-| AWS Polly | `/api/tts` |
-| Make.com webhook | `/api/generate-email` |
-| Gmail SMTP | `functions/index.js` via `settings/email_config` or `GMAIL_*` env |
-| GitHub Actions | Daily POST to `https://aicyro.pro/api/cron/retention-cleanup` |
-| Netlify (inferred) | Production host in cron workflow; `.netlify/` gitignored |
+| Service                          | Used by                                                                               |
+| -------------------------------- | ------------------------------------------------------------------------------------- |
+| Firebase Realtime Database       | APIs, dashboard, chatbot, Cloud Functions                                             |
+| Firebase Storage                 | Chatbot uploads `chat_images/{session_id}/{timestamp}.jpg`                            |
+| OpenAI Chat Completions          | `/api/chat`, `/api/leads` (abandoned summary), `/api/insights`, `/api/generate-audit` |
+| OpenAI Vision                    | `/api/analyze-image` (`gpt-4o-mini`, `detail: "low"`)                                 |
+| OpenAI Realtime `client_secrets` | `/api/openai-token`                                                                   |
+| OpenAI TTS (script)              | `scripts/voice_qa_harness.js`                                                         |
+| AWS Polly                        | `/api/tts`                                                                            |
+| Make.com webhook                 | `/api/generate-email`                                                                 |
+| Gmail SMTP                       | `functions/index.js` via `settings/email_config` or `GMAIL_*` env                     |
+| GitHub Actions                   | Daily POST to `https://aicyro.pro/api/cron/retention-cleanup`                         |
+| Netlify (inferred)               | Production host in cron workflow; `.netlify/` gitignored                              |
 
 ### 3.4 Environment variables (names only)
 
@@ -254,18 +254,18 @@ pages (index, legal, audit, lg, logs, 404)
 
 ### 4.5 Unused / leftover internals
 
-| File | Notes |
-|---|---|
-| `src/pages/api/upload-logo.js` | Name/export say upload; **body is a voice token mint** |
-| `openai-token copy.js`, `openai-token copy 2.js` | Duplicate token APIs |
-| `src/styles/globals copy.css`, `Navbar copy.jsx` | Copies; audit page still uses Navbar copy |
-| `src/lib/toolTracer.js` | Implemented; **no API currently imports it** |
-| `@aws-sdk/client-transcribe`, `formidable` | In package.json, unused in `src/` |
-| `Home/OLD/*` | Imported in `index.jsx` but commented out in the render tree |
-| `functions/assets/logo.png` | Unused; emails embed inline SVG (`cid:company-logo`) |
-| `REDIRECT_CONFIG.md` | Documents redirects **not** present in `next.config.js` |
-| `src/database.json` | Seed login objects with plaintext passwords |
-| Notification field names | UI writes `emailAlerts`, `urgentOnly`, `adminEmail`. Function still reads `urgentAlerts`, `afterHoursAlerts`, plus `adminEmail` / `leadReceivers` |
+| File                                             | Notes                                                                                                                                             |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/pages/api/upload-logo.js`                   | Name/export say upload; **body is a voice token mint**                                                                                            |
+| `openai-token copy.js`, `openai-token copy 2.js` | Duplicate token APIs                                                                                                                              |
+| `src/styles/globals copy.css`, `Navbar copy.jsx` | Copies; audit page still uses Navbar copy                                                                                                         |
+| `src/lib/toolTracer.js`                          | Implemented; **no API currently imports it**                                                                                                      |
+| `@aws-sdk/client-transcribe`, `formidable`       | In package.json, unused in `src/`                                                                                                                 |
+| `Home/OLD/*`                                     | Imported in `index.jsx` but commented out in the render tree                                                                                      |
+| `functions/assets/logo.png`                      | Unused; emails embed inline SVG (`cid:company-logo`)                                                                                              |
+| `REDIRECT_CONFIG.md`                             | Documents redirects **not** present in `next.config.js`                                                                                           |
+| `src/database.json`                              | Seed login objects with plaintext passwords                                                                                                       |
+| Notification field names                         | UI writes `emailAlerts`, `urgentOnly`, `adminEmail`. Function still reads `urgentAlerts`, `afterHoursAlerts`, plus `adminEmail` / `leadReceivers` |
 
 ---
 
@@ -273,36 +273,36 @@ pages (index, legal, audit, lg, logs, 404)
 
 ### Realtime Database
 
-| Path | Writers | Readers |
-|---|---|---|
-| `settings/chatbot_config` | ChatbotSettings | ruleBook, AicyroChatbot, openai-token |
-| `settings/email_config` | NotificationSettings (`senderName`, `smtpEmail`, `smtpPassword`) | Cloud Function `getDynamicTransporter` |
-| `settings/log_retention` | (dashboard, if present) | retention-cleanup |
-| `login` | PasswordChange, ClientManagement | login API, LoginScreen |
-| `superadmins` | superadmin flows | SuperAdminLogin |
-| `users/{username}/appearance` | Appearance settings | ThemeProvider, lg.jsx |
-| `users/root/notifications` | NotificationSettings | Cloud Function (receiver + alert gates) |
-| `prospects/{session_id}` | chat, sync-voice | chat, openai-token, sync-voice, analyze-image |
-| `prospects/{session_id}/last_vision_inspection` | analyze-image (relevant images only) | lead/CRM consumers |
-| `session_actions/{session_id}` | chat, sync-voice | same |
-| `transcripts/{session_id}` | sync-voice; wiped by chat deletion | Conversations |
-| `leads/{id}` | /api/leads; analyze-image (issue/urgency/image URL) | dashboard, insights |
-| `audits/{id}` | generate-audit | Report / audit UI |
-| `email_alerts/{id}` | notificationHelper | `sendEmailAlert` |
-| `scheduled_reminders` | Cloud Function | `processScheduledReminders` |
-| `notifications` | notificationHelper | LiveNotifications |
-| `analytics/*` | /api/analytics | HomeScreen / Report |
-| `analytics_events` | /api/chat | analytics consumers |
-| `voice_telemetry/{session}`, `voice_errors/{session}` | sync-voice | ops |
-| `system_logs/structured_events/{log_id}` | /api/app-state | /api/app-query, retention |
-| `system_logs/activity_events` | legacy | app-query merge |
-| `system_alerts` | alertManager | ops |
-| `logs/email_errors` | Cloud Function | ops |
+| Path                                                  | Writers                                                          | Readers                                       |
+| ----------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------- |
+| `settings/chatbot_config`                             | ChatbotSettings                                                  | ruleBook, AicyroChatbot, openai-token         |
+| `settings/email_config`                               | NotificationSettings (`senderName`, `smtpEmail`, `smtpPassword`) | Cloud Function `getDynamicTransporter`        |
+| `settings/log_retention`                              | (dashboard, if present)                                          | retention-cleanup                             |
+| `login`                                               | PasswordChange, ClientManagement                                 | login API, LoginScreen                        |
+| `superadmins`                                         | superadmin flows                                                 | SuperAdminLogin                               |
+| `users/{username}/appearance`                         | Appearance settings                                              | ThemeProvider, lg.jsx                         |
+| `users/root/notifications`                            | NotificationSettings                                             | Cloud Function (receiver + alert gates)       |
+| `prospects/{session_id}`                              | chat, sync-voice                                                 | chat, openai-token, sync-voice, analyze-image |
+| `prospects/{session_id}/last_vision_inspection`       | analyze-image (relevant images only)                             | lead/CRM consumers                            |
+| `session_actions/{session_id}`                        | chat, sync-voice                                                 | same                                          |
+| `transcripts/{session_id}`                            | sync-voice; wiped by chat deletion                               | Conversations                                 |
+| `leads/{id}`                                          | /api/leads; analyze-image (issue/urgency/image URL)              | dashboard, insights                           |
+| `audits/{id}`                                         | generate-audit                                                   | Report / audit UI                             |
+| `email_alerts/{id}`                                   | notificationHelper                                               | `sendEmailAlert`                              |
+| `scheduled_reminders`                                 | Cloud Function                                                   | `processScheduledReminders`                   |
+| `notifications`                                       | notificationHelper                                               | LiveNotifications                             |
+| `analytics/*`                                         | /api/analytics                                                   | HomeScreen / Report                           |
+| `analytics_events`                                    | /api/chat                                                        | analytics consumers                           |
+| `voice_telemetry/{session}`, `voice_errors/{session}` | sync-voice                                                       | ops                                           |
+| `system_logs/structured_events/{log_id}`              | /api/app-state                                                   | /api/app-query, retention                     |
+| `system_logs/activity_events`                         | legacy                                                           | app-query merge                               |
+| `system_alerts`                                       | alertManager                                                     | ops                                           |
+| `logs/email_errors`                                   | Cloud Function                                                   | ops                                           |
 
 ### Storage
 
-| Path | Writer | Consumer |
-|---|---|---|
+| Path                                       | Writer                                       | Consumer                              |
+| ------------------------------------------ | -------------------------------------------- | ------------------------------------- |
 | `chat_images/{session_id}/{timestamp}.jpg` | AicyroChatbot (`uploadString` JPEG data URL) | `/api/analyze-image` via download URL |
 
 ---
@@ -311,36 +311,36 @@ pages (index, legal, audit, lg, logs, 404)
 
 ### 6.1 Root / config
 
-| File | Logic |
-|---|---|
-| `package.json` | Scripts: `dev`, `build`, `start`, `lint`, `test:ai` |
-| `next.config.js` | `{ reactStrictMode: true }` only |
-| `jsconfig.json` | `@/` alias |
+| File                 | Logic                                                              |
+| -------------------- | ------------------------------------------------------------------ |
+| `package.json`       | Scripts: `dev`, `build`, `start`, `lint`, `test:ai`                |
+| `next.config.js`     | `{ reactStrictMode: true }` only                                   |
+| `jsconfig.json`      | `@/` alias                                                         |
 | `tailwind.config.js` | `darkMode: "class"`; CSS-variable tokens; scans pages + components |
-| `postcss.config.js` | Tailwind + Autoprefixer |
-| `eslint.config.mjs` | Flat config wrapping `next/core-web-vitals` |
-| `.eslintrc.json` | Legacy ESLint config (alongside flat) |
-| `firebase.json` | Deploys `functions/` |
-| `.firebaserc` | Default project `aichatbot-a6217` |
-| `.gitignore` | node_modules, Next output, `.env*`, `.netlify` |
-| `.npmrc` | `legacy-peer-deps=true` |
-| `README.md` | Outdated route list (`/services`, `/portfolio` do not exist) |
-| `REDIRECT_CONFIG.md` | How-to for redirects not wired in config |
+| `postcss.config.js`  | Tailwind + Autoprefixer                                            |
+| `eslint.config.mjs`  | Flat config wrapping `next/core-web-vitals`                        |
+| `.eslintrc.json`     | Legacy ESLint config (alongside flat)                              |
+| `firebase.json`      | Deploys `functions/`                                               |
+| `.firebaserc`        | Default project `aichatbot-a6217`                                  |
+| `.gitignore`         | node_modules, Next output, `.env*`, `.netlify`                     |
+| `.npmrc`             | `legacy-peer-deps=true`                                            |
+| `README.md`          | Outdated route list (`/services`, `/portfolio` do not exist)       |
+| `REDIRECT_CONFIG.md` | How-to for redirects not wired in config                           |
 
 ### 6.2 Docs / evaluations / public / assets
 
-| File | Logic |
-|---|---|
-| `docs/LOGGING_SCHEMA.md` | Canonical structured log fields |
-| `docs/VOICE_PRIVACY_POLICY.md` | Voice data handling |
-| `docs/VOICE_PRODUCTION_READINESS_SIGNOFF.md` | Launch checklist |
-| `docs/VOICE_QA_TEST_SUITE.md` | Voice QA scenarios |
-| `evaluations/report_v2.1.0.json` | Last `npm run test:ai` output |
-| `public/*` | SEO/static |
-| `src/assets/*` | Component-imported SVGs |
-| `src/styles/globals.css` | Theme CSS variables |
-| `src/styles/globals copy.css` | Duplicate stylesheet |
-| `src/database.json` | Local seed of `login` users (plaintext) |
+| File                                         | Logic                                   |
+| -------------------------------------------- | --------------------------------------- |
+| `docs/LOGGING_SCHEMA.md`                     | Canonical structured log fields         |
+| `docs/VOICE_PRIVACY_POLICY.md`               | Voice data handling                     |
+| `docs/VOICE_PRODUCTION_READINESS_SIGNOFF.md` | Launch checklist                        |
+| `docs/VOICE_QA_TEST_SUITE.md`                | Voice QA scenarios                      |
+| `evaluations/report_v2.1.0.json`             | Last `npm run test:ai` output           |
+| `public/*`                                   | SEO/static                              |
+| `src/assets/*`                               | Component-imported SVGs                 |
+| `src/styles/globals.css`                     | Theme CSS variables                     |
+| `src/styles/globals copy.css`                | Duplicate stylesheet                    |
+| `src/database.json`                          | Local seed of `login` users (plaintext) |
 
 ### 6.3 Cloud Functions
 
@@ -361,70 +361,70 @@ pages (index, legal, audit, lg, logs, 404)
 
 ### 6.5 Scripts
 
-| File | Logic |
-|---|---|
-| `scripts/run_evaluations.js` | Hits local `/api/chat` (pricing/handoff/deletion); writes `evaluations/report_*.json` |
-| `scripts/qa-simulator.js` | Smoke tests chat + sync-voice |
-| `scripts/voice_qa_harness.js` | OpenAI TTS MP3s for pronunciation QA |
-| `scripts/vad_tuning_harness.js` | Offline VAD pause vs `silence_duration_ms` |
+| File                            | Logic                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------- |
+| `scripts/run_evaluations.js`    | Hits local `/api/chat` (pricing/handoff/deletion); writes `evaluations/report_*.json` |
+| `scripts/qa-simulator.js`       | Smoke tests chat + sync-voice                                                         |
+| `scripts/voice_qa_harness.js`   | OpenAI TTS MP3s for pronunciation QA                                                  |
+| `scripts/vad_tuning_harness.js` | Offline VAD pause vs `silence_duration_ms`                                            |
 
 ### 6.6 `src/lib` (core)
 
-| File | Logic | Internal deps | External |
-|---|---|---|---|
-| `firebase.js` | Singleton app, `db`, **`storage`** (legacy commented block above live code) | — | `firebase/app`, `database`, `storage` |
-| `ruleBook.js` | Defaults + merge `settings/chatbot_config`; text JSON schema vs voice brevity; `POLICY_VERSION` `2.11.0` | firebase | Firebase |
-| `visionRuleBook.js` | Vision system prompt: allowed home-service domains, `is_irrelevant` rejection, JSON schema; `VISION_POLICY_VERSION` `1.1.0` | — | — |
-| `cookiePersonalization.js` | Strict cookies: consent + anon UUID | — | `document.cookie` |
-| `logger.js` | Redact secrets/PII, POST `/api/app-state`, smart alerts | alertManager | fetch |
-| `loggerPresets.js` | Website, API, AI, Voice, Pulse factories | logger, cookiePersonalization | — |
-| `alertManager.js` | CRITICAL throttle 5 min → `system_alerts` | firebase | Firebase |
-| `apiMiddleware.js` | Correlation, latency, status, 500 catch | loggerPresets, tracer | — |
-| `tracer.js` | UUID + `fetchWithTrace` 15s abort | cookiePersonalization, loggerPresets | fetch |
-| `aiTracer.js` | LLM lifecycle + `safeParseAiResponse` | — | — |
-| `ragTracer.js` | Retrieval IDs/scores, not content | — | — |
-| `toolTracer.js` | Tool JSON parse + execute | — | — |
-| `dbTracer.js` | Time Firebase ops; classify failures | — | — |
-| `retryTracer.js` | Exponential backoff | — | — |
-| `integrationTracer.js` | Sanitize URL/headers, fetch + retry | retryTracer | fetch |
-| `auditTracer.js` | who/what/target/previous/new | — | — |
-| `activityTracker.js` | Skip `/lg`; POST analytics events | cookiePersonalization | `/api/analytics` |
-| `notificationHelper.js` | `logToFirebase` + `queueEmailAlert` | firebase | Firebase |
+| File                       | Logic                                                                                                                       | Internal deps                        | External                              |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------- |
+| `firebase.js`              | Singleton app, `db`, **`storage`** (legacy commented block above live code)                                                 | —                                    | `firebase/app`, `database`, `storage` |
+| `ruleBook.js`              | Defaults + merge `settings/chatbot_config`; text JSON schema vs voice brevity; `POLICY_VERSION` `2.11.0`                    | firebase                             | Firebase                              |
+| `visionRuleBook.js`        | Vision system prompt: allowed home-service domains, `is_irrelevant` rejection, JSON schema; `VISION_POLICY_VERSION` `1.1.0` | —                                    | —                                     |
+| `cookiePersonalization.js` | Strict cookies: consent + anon UUID                                                                                         | —                                    | `document.cookie`                     |
+| `logger.js`                | Redact secrets/PII, POST `/api/app-state`, smart alerts                                                                     | alertManager                         | fetch                                 |
+| `loggerPresets.js`         | Website, API, AI, Voice, Pulse factories                                                                                    | logger, cookiePersonalization        | —                                     |
+| `alertManager.js`          | CRITICAL throttle 5 min → `system_alerts`                                                                                   | firebase                             | Firebase                              |
+| `apiMiddleware.js`         | Correlation, latency, status, 500 catch                                                                                     | loggerPresets, tracer                | —                                     |
+| `tracer.js`                | UUID + `fetchWithTrace` 15s abort                                                                                           | cookiePersonalization, loggerPresets | fetch                                 |
+| `aiTracer.js`              | LLM lifecycle + `safeParseAiResponse`                                                                                       | —                                    | —                                     |
+| `ragTracer.js`             | Retrieval IDs/scores, not content                                                                                           | —                                    | —                                     |
+| `toolTracer.js`            | Tool JSON parse + execute                                                                                                   | —                                    | —                                     |
+| `dbTracer.js`              | Time Firebase ops; classify failures                                                                                        | —                                    | —                                     |
+| `retryTracer.js`           | Exponential backoff                                                                                                         | —                                    | —                                     |
+| `integrationTracer.js`     | Sanitize URL/headers, fetch + retry                                                                                         | retryTracer                          | fetch                                 |
+| `auditTracer.js`           | who/what/target/previous/new                                                                                                | —                                    | —                                     |
+| `activityTracker.js`       | Skip `/lg`; POST analytics events                                                                                           | cookiePersonalization                | `/api/analytics`                      |
+| `notificationHelper.js`    | `logToFirebase` + `queueEmailAlert`                                                                                         | firebase                             | Firebase                              |
 
 ### 6.7 API routes
 
-| File | Logic |
-|---|---|
-| `chat.js` | POST. Rate-limit 15/min/session. Prompt-injection flag. Merge prospect + client lead. Mock RAG. `getMasterRuleBook("text")`. OpenAI JSON with retry+trace. Persist `prospects` / `session_actions`. Wipe transcripts on `TRIGGER_DATA_DELETION`. Fallback 200 reply on engine failure. |
-| `analyze-image.js` | POST `{ session_id, image_url, user_prompt }`. Load prospect business context. Vision JSON via `getVisionSystemPrompt`. If `is_irrelevant`, return reply **without** writing CRM. Else write `prospects/{id}/last_vision_inspection` and patch `leads/{id}`. |
-| `openai-token.js` | POST. Validate `lead_{ts}_{hash}`. Rate-limit 5/min. Voice rulebook. **403 if `voiceEnabled === false`**. Mint Realtime client secret + tools. |
-| `sync-voice.js` | POST telemetry, errors, transcripts, or `tool_name` routing with `session_actions` idempotency. |
-| `leads.js` | GET all leads. POST upsert; duplicate skip; abandoned-chat summary; dbTracer. |
-| `app-state.js` | POST ingest structured log |
-| `app-query.js` | POST RBAC log query; merge legacy; cap 1500; tenant isolation |
-| `analytics.js` | POST counters + visitor events |
-| `login.js` | POST plaintext match against `login`; audit trail |
-| `insights.js` | POST last 50 leads → OpenAI KPI/chart JSON |
-| `generate-audit.js` | POST save audit lead, GPT report (re-inits Firebase locally) |
-| `generate-email.js` | POST Make.com via integrationTracer |
-| `tts.js` | POST Polly neural MP3; maps OpenAI `ash` → Polly `Matthew` |
-| `upload-logo.js` | **Misnamed** Realtime token mint |
-| `openai-token copy*.js` | Older token handlers |
-| `cron/retention-cleanup.js` | Bearer `CRON_SECRET`; approved retention policy; delete aged logs |
+| File                        | Logic                                                                                                                                                                                                                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat.js`                   | POST. Rate-limit 15/min/session. Prompt-injection flag. Merge prospect + client lead. Mock RAG. `getMasterRuleBook("text")`. OpenAI JSON with retry+trace. Persist `prospects` / `session_actions`. Wipe transcripts on `TRIGGER_DATA_DELETION`. Fallback 200 reply on engine failure. |
+| `analyze-image.js`          | POST `{ session_id, image_url, user_prompt }`. Load prospect business context. Vision JSON via `getVisionSystemPrompt`. If `is_irrelevant`, return reply **without** writing CRM. Else write `prospects/{id}/last_vision_inspection` and patch `leads/{id}`.                           |
+| `openai-token.js`           | POST. Validate `lead_{ts}_{hash}`. Rate-limit 5/min. Voice rulebook. **403 if `voiceEnabled === false`**. Mint Realtime client secret + tools.                                                                                                                                         |
+| `sync-voice.js`             | POST telemetry, errors, transcripts, or `tool_name` routing with `session_actions` idempotency.                                                                                                                                                                                        |
+| `leads.js`                  | GET all leads. POST upsert; duplicate skip; abandoned-chat summary; dbTracer.                                                                                                                                                                                                          |
+| `app-state.js`              | POST ingest structured log                                                                                                                                                                                                                                                             |
+| `app-query.js`              | POST RBAC log query; merge legacy; cap 1500; tenant isolation                                                                                                                                                                                                                          |
+| `analytics.js`              | POST counters + visitor events                                                                                                                                                                                                                                                         |
+| `login.js`                  | POST plaintext match against `login`; audit trail                                                                                                                                                                                                                                      |
+| `insights.js`               | POST last 50 leads → OpenAI KPI/chart JSON                                                                                                                                                                                                                                             |
+| `generate-audit.js`         | POST save audit lead, GPT report (re-inits Firebase locally)                                                                                                                                                                                                                           |
+| `generate-email.js`         | POST Make.com via integrationTracer                                                                                                                                                                                                                                                    |
+| `tts.js`                    | POST Polly neural MP3; maps OpenAI `ash` → Polly `Matthew`                                                                                                                                                                                                                             |
+| `upload-logo.js`            | **Misnamed** Realtime token mint                                                                                                                                                                                                                                                       |
+| `openai-token copy*.js`     | Older token handlers                                                                                                                                                                                                                                                                   |
+| `cron/retention-cleanup.js` | Bearer `CRON_SECRET`; approved retention policy; delete aged logs                                                                                                                                                                                                                      |
 
 ### 6.8 Pages (routes)
 
-| File | Logic |
-|---|---|
-| `_document.jsx` | Inline theme script except `/lg` |
-| `_app.jsx` | ThemeProvider, layout, GlobalActivityTracker, visit tracking, cookie banner (not on `/logs`) |
-| `layout.jsx` | Chatbot except `/lg` and `/logs` |
-| `index.jsx` | Navbar, PopupModal, Hero, NightScene, TheTurn, Problem, Pricing, Compare, NotFor, Trust, Offer, Faq, CTA, Footer, Popupform. `Home/OLD/*` imported but commented out |
-| `lg.jsx` | Pulse shell: reload terminates session; user vs superadmin; sidebar views |
-| `logs.jsx` | localStorage auth; poll `/api/app-query` |
-| `free-website-audit.jsx` | 16-step wizard; `/api/generate-audit`; jsPDF; Navbar copy |
-| `privacy.jsx` / `cookie.jsx` / `termofuse.jsx` | Static legal |
-| `404.jsx` | Themed 404 |
+| File                                           | Logic                                                                                                                                                                |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `_document.jsx`                                | Inline theme script except `/lg`                                                                                                                                     |
+| `_app.jsx`                                     | ThemeProvider, layout, GlobalActivityTracker, visit tracking, cookie banner (not on `/logs`)                                                                         |
+| `layout.jsx`                                   | Chatbot except `/lg` and `/logs`                                                                                                                                     |
+| `index.jsx`                                    | Navbar, PopupModal, Hero, NightScene, TheTurn, Problem, Pricing, Compare, NotFor, Trust, Offer, Faq, CTA, Footer, Popupform. `Home/OLD/*` imported but commented out |
+| `lg.jsx`                                       | Pulse shell: reload terminates session; user vs superadmin; sidebar views                                                                                            |
+| `logs.jsx`                                     | localStorage auth; poll `/api/app-query`                                                                                                                             |
+| `free-website-audit.jsx`                       | 16-step wizard; `/api/generate-audit`; jsPDF; Navbar copy                                                                                                            |
+| `privacy.jsx` / `cookie.jsx` / `termofuse.jsx` | Static legal                                                                                                                                                         |
+| `404.jsx`                                      | Themed 404                                                                                                                                                           |
 
 ### 6.9 Chatbot
 
@@ -437,17 +437,17 @@ pages (index, legal, audit, lg, logs, 404)
 
 ### 6.10 Essential / theme / forms
 
-| File | Logic |
-|---|---|
-| `ThemeProvider.jsx` | Public vs dashboard theme; live `users/{user}/appearance` |
-| `ThemeToggle.jsx` | localStorage light/dark |
-| `GlobalActivityTracker.jsx` | Window error / resource 404 / unhandledrejection |
-| `Seo.jsx` | `next/head` |
-| `Navbar.jsx` | Marketing nav |
-| `Navbar copy.jsx` | Used by audit page |
-| `Footer.jsx` | Footer links |
-| `CookieConsentBanner.jsx` | Consent cookie + anon id |
-| `Popupform.jsx` / `PopupModel.jsx` | Lead popups writing Firebase |
+| File                               | Logic                                                     |
+| ---------------------------------- | --------------------------------------------------------- |
+| `ThemeProvider.jsx`                | Public vs dashboard theme; live `users/{user}/appearance` |
+| `ThemeToggle.jsx`                  | localStorage light/dark                                   |
+| `GlobalActivityTracker.jsx`        | Window error / resource 404 / unhandledrejection          |
+| `Seo.jsx`                          | `next/head`                                               |
+| `Navbar.jsx`                       | Marketing nav                                             |
+| `Navbar copy.jsx`                  | Used by audit page                                        |
+| `Footer.jsx`                       | Footer links                                              |
+| `CookieConsentBanner.jsx`          | Consent cookie + anon id                                  |
+| `Popupform.jsx` / `PopupModel.jsx` | Lead popups writing Firebase                              |
 
 ### 6.11 Home (current)
 
@@ -459,29 +459,29 @@ Legacy blocks still imported by `index.jsx` but commented out in the return: Spe
 
 ### 6.13 Dashboard (Pulse)
 
-| File | Logic |
-|---|---|
-| `LoginScreen.jsx` | Client login vs `login` node |
-| `superadminlogin.jsx` | Superadmin login |
-| `SuperAdminDashboard.jsx` | Superadmin shell |
-| `ClientManagement.jsx` | CRUD clients + audit |
-| `SuperAdminAppearance.jsx` | Superadmin theme |
-| `HomeScreen.jsx` | Analytics summary from RTDB |
-| `TerminalScreen.jsx` | Lead terminal via `/api/leads` |
-| `NewScreen.jsx` | Alternate view stub |
-| `Booking.jsx` | Live bookings; status `update` |
-| `Insight.jsx` | `/api/insights` + recharts |
-| `Conversations.jsx` | Transcripts / leads |
-| `Report.jsx` | Reporting from RTDB |
-| `OperatingHours.jsx` | Hours from Firebase |
-| `LiveNotifications.jsx` | Live `notifications` |
-| `CookieDataDisplay.jsx` | Visitor cookie/geo + maps |
-| `SettingsScreen.jsx` | Combined settings writer |
-| `PasswordChange.jsx` | Update `login` passwords |
-| `BusinessProfile.jsx` | Business profile |
-| `Chatbotsetting.jsx` | Writes `settings/chatbot_config` |
+| File                        | Logic                                                                                                                                                                                    |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LoginScreen.jsx`           | Client login vs `login` node                                                                                                                                                             |
+| `superadminlogin.jsx`       | Superadmin login                                                                                                                                                                         |
+| `SuperAdminDashboard.jsx`   | Superadmin shell                                                                                                                                                                         |
+| `ClientManagement.jsx`      | CRUD clients + audit                                                                                                                                                                     |
+| `SuperAdminAppearance.jsx`  | Superadmin theme                                                                                                                                                                         |
+| `HomeScreen.jsx`            | Analytics summary from RTDB                                                                                                                                                              |
+| `TerminalScreen.jsx`        | Lead terminal via `/api/leads`                                                                                                                                                           |
+| `NewScreen.jsx`             | Alternate view stub                                                                                                                                                                      |
+| `Booking.jsx`               | Live bookings; status `update`                                                                                                                                                           |
+| `Insight.jsx`               | `/api/insights` + recharts                                                                                                                                                               |
+| `Conversations.jsx`         | Transcripts / leads                                                                                                                                                                      |
+| `Report.jsx`                | Reporting from RTDB                                                                                                                                                                      |
+| `OperatingHours.jsx`        | Hours from Firebase                                                                                                                                                                      |
+| `LiveNotifications.jsx`     | Live `notifications`                                                                                                                                                                     |
+| `CookieDataDisplay.jsx`     | Visitor cookie/geo + maps                                                                                                                                                                |
+| `SettingsScreen.jsx`        | Combined settings writer                                                                                                                                                                 |
+| `PasswordChange.jsx`        | Update `login` passwords                                                                                                                                                                 |
+| `BusinessProfile.jsx`       | Business profile                                                                                                                                                                         |
+| `Chatbotsetting.jsx`        | Writes `settings/chatbot_config`                                                                                                                                                         |
 | `notification-settings.jsx` | Two cards: **Outgoing Sender** (`settings/email_config`) and **Admin Alert Routing** (`users/root/notifications`: `emailAlerts`, `adminEmail`, `urgentOnly`). Custom toast, Pulse logger |
-| `apearance.jsx` | Theme preview using Home/Terminal/Booking |
+| `apearance.jsx`             | Theme preview using Home/Terminal/Booking                                                                                                                                                |
 
 ---
 
@@ -531,10 +531,10 @@ Legacy blocks still imported by `index.jsx` but commented out in the return: Spe
 
 ## 9. Suggested reading order for engineers
 
-1. `src/lib/ruleBook.js` — text/voice product policy  
-2. `src/lib/visionRuleBook.js` + `src/pages/api/analyze-image.js` + vision path in `AicyroChatbot.jsx`  
-3. `src/pages/api/chat.js` + `src/components/Chatbot/AicyroChatbot.jsx`  
-4. `src/pages/api/openai-token.js` + `sync-voice.js`  
-5. `src/lib/logger.js` + `apiMiddleware.js` + `docs/LOGGING_SCHEMA.md`  
-6. `functions/index.js` + `notificationHelper.js` + `notification-settings.jsx`  
+1. `src/lib/ruleBook.js` — text/voice product policy
+2. `src/lib/visionRuleBook.js` + `src/pages/api/analyze-image.js` + vision path in `AicyroChatbot.jsx`
+3. `src/pages/api/chat.js` + `src/components/Chatbot/AicyroChatbot.jsx`
+4. `src/pages/api/openai-token.js` + `sync-voice.js`
+5. `src/lib/logger.js` + `apiMiddleware.js` + `docs/LOGGING_SCHEMA.md`
+6. `functions/index.js` + `notificationHelper.js` + `notification-settings.jsx`
 7. `src/pages/lg.jsx` + `Chatbotsetting.jsx`
