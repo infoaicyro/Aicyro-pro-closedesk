@@ -1,651 +1,148 @@
-// import React, { useState, useEffect } from "react";
-// import toast, { Toaster } from "react-hot-toast";
-// import { ref, get, set } from "firebase/database";
-// import { db } from "../../../lib/firebase";
+// src/components/Dashboard/Settings/notification-settings.jsx
+"use client";
 
-// export default function NotificationSettings() {
-//   const [settings, setSettings] = useState({
-//     leadReceivers: "",
-//     urgentAlerts: true,
-//     afterHoursAlerts: false,
-//     dailySummary: true,
-//     weeklySummary: false,
-//   });
-
-//   const [username, setUsername] = useState(null);
-//   const [isSaving, setIsSaving] = useState(false);
-//   const [emailError, setEmailError] = useState(""); // NEW: Error state for validation
-
-//   // Load user from local storage and fetch their settings
-//   useEffect(() => {
-//     const storedUser = localStorage.getItem("currentUser");
-//     if (storedUser) {
-//       setUsername(storedUser);
-//       loadSettingsFromDB(storedUser);
-//     }
-//   }, []);
-
-//   const loadSettingsFromDB = async (activeUser) => {
-//     try {
-//       const settingsRef = ref(db, `users/${activeUser}/notifications`);
-//       const snapshot = await get(settingsRef);
-
-//       if (snapshot.exists()) {
-//         setSettings((prev) => ({ ...prev, ...snapshot.val() }));
-//       }
-//     } catch (error) {
-//       console.error("Failed to load notification settings", error);
-//     }
-//   };
-
-//   const handleToggle = (field) => {
-//     setSettings((prev) => ({ ...prev, [field]: !prev[field] }));
-//   };
-
-//   // NEW: Real-time Email Validation Logic
-//   const handleEmailsChange = (e) => {
-//     const val = e.target.value;
-//     setSettings({ ...settings, leadReceivers: val });
-
-//     if (!val.trim()) {
-//       setEmailError(""); // Clear error if empty
-//       return;
-//     }
-
-//     // Split by comma, trim whitespace, and ignore empty strings (like trailing commas)
-//     const emails = val
-//       .split(",")
-//       .map((email) => email.trim())
-//       .filter((email) => email !== "");
-
-//     // Standard email regex
-//     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-//     // Find all emails that fail the regex test
-//     const invalidEmails = emails.filter((email) => !emailRegex.test(email));
-
-//     if (invalidEmails.length > 0) {
-//       setEmailError(`Invalid email format: ${invalidEmails.join(", ")}`);
-//     } else {
-//       setEmailError("");
-//     }
-//   };
-
-//   const handleSave = async (e) => {
-//     e.preventDefault();
-
-//     // Prevent saving if there are validation errors
-//     if (emailError) {
-//       toast.error("Please fix email errors before saving.");
-//       return;
-//     }
-
-//     const activeUser = username || localStorage.getItem("currentUser");
-
-//     if (!activeUser) {
-//       toast.error("Error: No user logged in.");
-//       return;
-//     }
-
-//     setIsSaving(true);
-
-//     try {
-//       // Save settings to Firebase
-//       const settingsRef = ref(db, `users/${activeUser}/notifications`);
-//       await set(settingsRef, settings);
-
-//       // Triggering the success toast with custom styling
-//       toast.success("Notification settings updated!", {
-//         style: {
-//           background: "#ffffff",
-//           color: "#0f172a",
-//           border: "1px solid #e2e8f0",
-//         },
-//         iconTheme: {
-//           primary: "#22c55e",
-//           secondary: "#ffffff",
-//         },
-//       });
-//     } catch (error) {
-//       console.error("Failed to save settings", error);
-//       toast.error("Failed to save settings.");
-//     } finally {
-//       setIsSaving(false);
-//     }
-//   };
-
-//   // Reusable Toggle Switch Component
-//   const ToggleSwitch = ({ label, description, isChecked, onToggle }) => (
-//     <div className="flex items-center justify-between py-4 border-b border-[var(--border-color)] last:border-0">
-//       <div className="flex flex-col pr-4">
-//         <span className="text-sm font-medium text-[var(--foreground)]">
-//           {label}
-//         </span>
-//         {description && (
-//           <span className="text-sm text-[var(--foreground-muted)] mt-1">
-//             {description}
-//           </span>
-//         )}
-//       </div>
-//       <button
-//         type="button"
-//         onClick={onToggle}
-//         className={`${
-//           isChecked
-//             ? "bg-[var(--primary)]"
-//             : "bg-[var(--foreground-muted)] opacity-50"
-//         } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:ring-offset-2 focus:ring-offset-[var(--background)]`}
-//         role="switch"
-//         aria-checked={isChecked}
-//       >
-//         <span
-//           aria-hidden="true"
-//           className={`${
-//             isChecked ? "translate-x-5" : "translate-x-0"
-//           } pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
-//         />
-//       </button>
-//     </div>
-//   );
-
-//   return (
-//     <div className="min-h-screen bg-[var(--background)] py-8 px-4 sm:px-6 lg:px-8 transition-colors duration-300 relative">
-//       {/* Toaster Component - Renders the actual popup */}
-//       <Toaster
-//         position="bottom-right"
-//         reverseOrder={false}
-//         toastOptions={{
-//           style: {
-//             background: "#ffffff",
-//             color: "#0f172a",
-//             border: "1px solid #e2e8f0",
-//           },
-//           success: {
-//             iconTheme: {
-//               primary: "#22c55e",
-//               secondary: "#ffffff",
-//             },
-//           },
-//           error: {
-//             iconTheme: {
-//               primary: "#ef4444",
-//               secondary: "#ffffff",
-//             },
-//           },
-//         }}
-//       />
-
-//       <div className="max-w-3xl mx-auto">
-//         <div className="bg-[var(--card-bg)] rounded-xl shadow-lg shadow-[var(--spotlight-opacity)] border border-[var(--border-color)] overflow-hidden transition-colors duration-300">
-//           {/* Header */}
-//           <div className="px-6 py-5 border-b border-[var(--border-color)] bg-[var(--card-bg)]">
-//             <h2 className="text-xl font-semibold leading-6 text-[var(--foreground)]">
-//               Notification Settings
-//             </h2>
-//             <p className="mt-1 text-sm text-[var(--foreground-muted)]">
-//               Manage how and when you receive alerts for new leads and system
-//               updates.
-//             </p>
-//           </div>
-
-//           {/* Form Content */}
-//           <form onSubmit={handleSave} className="px-6 py-5 sm:p-6">
-//             {/* Lead Alert Receivers Input */}
-//             <div className="mb-6 pb-6 border-b border-[var(--border-color)]">
-//               <label
-//                 htmlFor="receivers"
-//                 className="block text-sm font-medium text-[var(--foreground)] mb-2"
-//               >
-//                 Who receives new lead alerts
-//               </label>
-//               <p className="text-sm text-[var(--foreground-muted)] mb-3">
-//                 Enter email addresses separated by commas.
-//               </p>
-//               <input
-//                 type="text"
-//                 name="receivers"
-//                 id="receivers"
-//                 value={settings.leadReceivers}
-//                 onChange={handleEmailsChange}
-//                 placeholder="e.g., admin@example.com, sales@example.com"
-//                 className={`block w-full rounded-md border-0 py-2.5 px-3 bg-[var(--background)] text-[var(--foreground)] shadow-sm ring-1 ring-inset placeholder:text-[var(--foreground-muted)] sm:text-sm sm:leading-6 transition-all outline-none ${
-//                   emailError
-//                     ? "ring-red-500 focus:ring-2 focus:ring-inset focus:ring-red-500"
-//                     : "ring-[var(--border-color)] focus:ring-2 focus:ring-inset focus:ring-[var(--primary)]"
-//                 }`}
-//               />
-//               {/* Validation Error Message */}
-//               {emailError && (
-//                 <p className="mt-2 text-sm text-red-500 font-medium flex items-center gap-1.5">
-//                   <svg
-//                     className="w-4 h-4"
-//                     fill="none"
-//                     viewBox="0 0 24 24"
-//                     stroke="currentColor"
-//                   >
-//                     <path
-//                       strokeLinecap="round"
-//                       strokeLinejoin="round"
-//                       strokeWidth="2"
-//                       d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-//                     />
-//                   </svg>
-//                   {emailError}
-//                 </p>
-//               )}
-//             </div>
-
-//             {/* Toggles */}
-//             <div className="space-y-2">
-//               <ToggleSwitch
-//                 label="Urgent lead alerts"
-//                 description="Get notified immediately when a high-priority lead is captured."
-//                 isChecked={settings.urgentAlerts}
-//                 onToggle={() => handleToggle("urgentAlerts")}
-//               />
-
-//               <ToggleSwitch
-//                 label="After-hours alerts"
-//                 description="Receive notifications for leads captured outside of standard business hours."
-//                 isChecked={settings.afterHoursAlerts}
-//                 onToggle={() => handleToggle("afterHoursAlerts")}
-//               />
-
-//               <ToggleSwitch
-//                 label="Daily summary"
-//                 description="Receive a digest of all leads captured at the end of each day."
-//                 isChecked={settings.dailySummary}
-//                 onToggle={() => handleToggle("dailySummary")}
-//               />
-
-//               <ToggleSwitch
-//                 label="Weekly summary"
-//                 description="Get a comprehensive report of lead activity every week."
-//                 isChecked={settings.weeklySummary}
-//                 onToggle={() => handleToggle("weeklySummary")}
-//               />
-//             </div>
-
-//             {/* Action Buttons */}
-//             <div className="mt-8 flex justify-end gap-x-3">
-//               {/* <button
-//                 type="button"
-//                 className="rounded-md bg-[var(--card-bg)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] shadow-sm ring-1 ring-inset ring-[var(--border-color)] hover:bg-[var(--background)] transition-colors duration-200"
-//               >
-//                 Cancel
-//               </button> */}
-//               <button
-//                 type="submit"
-//                 disabled={isSaving || emailError !== ""}
-//                 className="rounded-md bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[var(--secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-//               >
-//                 {isSaving ? "Saving..." : "Save Settings"}
-//               </button>
-//             </div>
-//           </form>
-//         </div>
-//       </div>
-//     </div>
-//   );
-// }
-
-//
-//
-//
-//
-//
-//
-//
-// /
-//
-
-import React, { useState, useEffect } from "react";
-import toast, { Toaster } from "react-hot-toast";
-import { ref, get, set, push } from "firebase/database"; // ADDED push
+import { useState, useEffect } from "react";
 import { db } from "../../../lib/firebase";
+// 🔥 Added 'push' to the import list to create new alerts
+import { ref, onValue, update, push } from "firebase/database";
+import { createPulseLogger } from "../../../lib/loggerPresets";
+
+const pulseLogger = createPulseLogger("NotificationSettings");
 
 export default function NotificationSettings() {
-  const [settings, setSettings] = useState({
-    leadReceivers: "",
-    urgentAlerts: true,
-    afterHoursAlerts: false,
-    dailySummary: true,
-    weeklySummary: false,
+  const [preferences, setPreferences] = useState({
+    emailAlerts: true,
+    smsAlerts: false,
+    urgentOnly: false,
+    adminEmail: "",
+    adminPhone: "",
   });
 
-  const [username, setUsername] = useState(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isTesting, setIsTesting] = useState(false); // NEW: Test loading state
-  const [emailError, setEmailError] = useState("");
+  const [isSavingPrefs, setIsSavingPrefs] = useState(false);
+  const [isSendingTest, setIsSendingTest] = useState(false); // 🔥 State for the test button
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
-  // Load user from local storage and fetch their settings
+  const showToast = (message, type = "success") => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: "", type: "success" }), 3500);
+  };
+
   useEffect(() => {
-    const storedUser = localStorage.getItem("currentUser");
-    if (storedUser) {
-      setUsername(storedUser);
-      loadSettingsFromDB(storedUser);
-    }
+    const prefsRef = ref(db, "users/root/notifications");
+    const unsubPrefs = onValue(prefsRef, (snapshot) => {
+      if (snapshot.exists()) setPreferences(snapshot.val());
+    });
+    return () => unsubPrefs();
   }, []);
 
-  const loadSettingsFromDB = async (activeUser) => {
+  const handleSavePreferences = async () => {
+    setIsSavingPrefs(true);
+    pulseLogger.info("settings_update", "notification_preferences_updated");
     try {
-      const settingsRef = ref(db, `users/${activeUser}/notifications`);
-      const snapshot = await get(settingsRef);
-
-      if (snapshot.exists()) {
-        setSettings((prev) => ({ ...prev, ...snapshot.val() }));
-      }
+      await update(ref(db, "users/root/notifications"), preferences);
+      showToast("Alert preferences saved successfully!");
     } catch (error) {
-      console.error("Failed to load notification settings", error);
+      pulseLogger.error("settings_update", "notification_preferences_failed", { error });
+      showToast("Failed to save alert preferences.", "error");
     }
+    setIsSavingPrefs(false);
   };
 
-  const handleToggle = (field) => {
-    setSettings((prev) => ({ ...prev, [field]: !prev[field] }));
-  };
-
-  // Real-time Email Validation Logic
-  const handleEmailsChange = (e) => {
-    const val = e.target.value;
-    setSettings({ ...settings, leadReceivers: val });
-
-    if (!val.trim()) {
-      setEmailError(""); // Clear error if empty
-      return;
-    }
-
-    // Split by comma, trim whitespace, and ignore empty strings
-    const emails = val
-      .split(",")
-      .map((email) => email.trim())
-      .filter((email) => email !== "");
-
-    // Standard email regex
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    // Find all emails that fail the regex test
-    const invalidEmails = emails.filter((email) => !emailRegex.test(email));
-
-    if (invalidEmails.length > 0) {
-      setEmailError(`Invalid email format: ${invalidEmails.join(", ")}`);
-    } else {
-      setEmailError("");
-    }
-  };
-
-  const handleSave = async (e) => {
-    if (e) e.preventDefault();
-
-    if (emailError) {
-      toast.error("Please fix email errors before saving.");
-      return false;
-    }
-
-    const activeUser = username || localStorage.getItem("currentUser");
-
-    if (!activeUser) {
-      toast.error("Error: No user logged in.");
-      return false;
-    }
-
-    setIsSaving(true);
-
+  // 🔥 Trigger a dummy alert to verify email dispatch
+  const handleTestEmail = async () => {
+    setIsSendingTest(true);
+    pulseLogger.info("settings_update", "test_email_triggered");
     try {
-      // Save settings to Firebase
-      const settingsRef = ref(db, `users/${activeUser}/notifications`);
-      await set(settingsRef, settings);
-
-      toast.success("Notification settings updated!", {
-        style: {
-          background: "#ffffff",
-          color: "#0f172a",
-          border: "1px solid #e2e8f0",
-        },
-        iconTheme: {
-          primary: "#22c55e",
-          secondary: "#ffffff",
-        },
-      });
-      return true;
-    } catch (error) {
-      console.error("Failed to save settings", error);
-      toast.error("Failed to save settings.");
-      return false;
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // NEW: Send a test notification via Firebase Queue
-  const handleTestNotification = async () => {
-    if (emailError || !settings.leadReceivers.trim()) {
-      toast.error("Please enter a valid email address first.");
-      return;
-    }
-
-    setIsTesting(true);
-
-    try {
-      // 1. Force save settings first so the backend fetches the newest email
-      const saved = await handleSave();
-      if (!saved) {
-        setIsTesting(false);
-        return;
-      }
-
-      // 2. Push fake lead data to the email_alerts queue
-      const emailQueueRef = ref(db, "email_alerts");
-      await set(push(emailQueueRef), {
-        title: "Test Alert: System is Working! 🎉",
-        message: "This is a test notification generated from your dashboard.",
-        event_type: "end", // Tells backend to use the detailed HTML template
-        timestamp: new Date().toISOString(),
+      const alertsRef = ref(db, "email_alerts");
+      await push(alertsRef, {
         status: "pending",
+        event_type: "end",
+        title: "Aicyro Pulse - Test Routing Alert",
+        message: "This is a test alert to verify your routing configuration is working correctly.",
         lead_data: {
-          name: "Test User",
-          email: "test@closedesk.ai",
-          phone: "(555) 000-1234",
-          service_requested: "Testing the Alert Pipeline",
-          location: "Dashboard Test",
-          urgency_level: "High", // Will trigger the red urgent banner
-          conversation_summary:
-            "The business owner clicked the 'Send Test Alert' button to verify that emails are successfully routing through Firebase Cloud Functions to their inbox.",
+          name: "Test System",
+          email: "noreply@aicyro.com",
+          phone: "N/A",
+          urgency_level: "Low",
+          conversation_summary: "System generated test email to verify routing preferences."
         },
+        timestamp: Date.now()
       });
-
-      toast.success("Test alert queued! Check your inbox in a few seconds.", {
-        icon: "✉️",
-        style: {
-          background: "#ffffff",
-          color: "#0f172a",
-          border: "1px solid #e2e8f0",
-        },
-      });
+      showToast("Test email triggered! Check your inbox.");
     } catch (error) {
-      console.error("Failed to send test notification:", error);
-      toast.error("Failed to queue test alert.");
-    } finally {
-      setIsTesting(false);
+      pulseLogger.error("settings_update", "test_email_failed", { error });
+      showToast("Failed to trigger test email.", "error");
     }
+    setIsSendingTest(false);
   };
-
-  // Reusable Toggle Switch Component
-  const ToggleSwitch = ({ label, description, isChecked, onToggle }) => (
-    <div className="flex items-center justify-between py-4 border-b border-[var(--border-color)] last:border-0">
-      <div className="flex flex-col pr-4">
-        <span className="text-sm font-medium text-[var(--foreground)]">
-          {label}
-        </span>
-        {description && (
-          <span className="text-sm text-[var(--foreground-muted)] mt-1">
-            {description}
-          </span>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={onToggle}
-        className={`${
-          isChecked
-            ? "bg-[var(--primary)]"
-            : "bg-[var(--foreground-muted)] opacity-50"
-        } relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:ring-offset-2 focus:ring-offset-[var(--background)]`}
-        role="switch"
-        aria-checked={isChecked}
-      >
-        <span
-          aria-hidden="true"
-          className={`${
-            isChecked ? "translate-x-5" : "translate-x-0"
-          } pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
-        />
-      </button>
-    </div>
-  );
 
   return (
-    <div className="min-h-screen bg-[var(--background)] py-8 px-4 sm:px-6 lg:px-8 transition-colors duration-300 relative">
-      <Toaster
-        position="bottom-right"
-        reverseOrder={false}
-        toastOptions={{
-          style: {
-            background: "#ffffff",
-            color: "#0f172a",
-            border: "1px solid #e2e8f0",
-          },
-          success: {
-            iconTheme: {
-              primary: "#22c55e",
-              secondary: "#ffffff",
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: "#ef4444",
-              secondary: "#ffffff",
-            },
-          },
-        }}
-      />
-
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-[var(--card-bg)] rounded-xl shadow-lg shadow-[var(--spotlight-opacity)] border border-[var(--border-color)] overflow-hidden transition-colors duration-300">
-          {/* Header */}
-          <div className="px-6 py-5 border-b border-[var(--border-color)] bg-[var(--card-bg)]">
-            <h2 className="text-xl font-semibold leading-6 text-[var(--foreground)]">
-              Notification Settings
-            </h2>
-            <p className="mt-1 text-sm text-[var(--foreground-muted)]">
-              Manage how and when you receive alerts for new leads and system
-              updates.
-            </p>
+    <div className="max-w-[800px] mx-auto p-4 sm:p-8 lg:p-12 animate-acy-fade font-sans bg-[#F9FAFB] min-h-screen relative">
+      <div className="bg-white rounded-[24px] p-6 sm:p-8 shadow-[0_2px_20px_rgba(0,0,0,0.03)] border border-gray-100">
+        <div className="flex items-center gap-4 mb-8">
+          <div className="w-12 h-12 rounded-xl bg-[#DCFCE7] text-[#16A34A] flex items-center justify-center shrink-0">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+          </div>
+          <div>
+            <h2 className="text-[22px] font-black text-gray-900 tracking-tight">Admin Routing</h2>
+            <p className="text-[13px] text-gray-500 font-medium mt-0.5">Where internal lead alerts are delivered.</p>
+          </div>
+        </div>
+        
+        <div className="space-y-6">
+          <div className="flex justify-between items-center p-5 border border-gray-100 rounded-[16px] bg-white shadow-sm">
+            <div>
+              <h3 className="text-[15px] font-bold text-gray-900">Enable Email Alerts</h3>
+              <p className="text-[12px] text-gray-500 mt-0.5">Receive immediate ping on new leads.</p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input type="checkbox" checked={preferences.emailAlerts} onChange={(e) => setPreferences({ ...preferences, emailAlerts: e.target.checked })} className="sr-only peer" />
+              <div className="w-12 h-7 bg-[#E5E7EB] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-200 after:border after:rounded-full after:h-6 after:w-6 after:transition-all after:shadow-sm peer-checked:bg-[var(--primary,#8B5CF6)] transition-colors"></div>
+            </label>
           </div>
 
-          {/* Form Content */}
-          <form onSubmit={handleSave} className="px-6 py-5 sm:p-6">
-            {/* Lead Alert Receivers Input */}
-            <div className="mb-6 pb-6 border-b border-[var(--border-color)]">
-              <label
-                htmlFor="receivers"
-                className="block text-sm font-medium text-[var(--foreground)] mb-2"
-              >
-                Who receives new lead alerts
-              </label>
-              <p className="text-sm text-[var(--foreground-muted)] mb-3">
-                Enter email addresses separated by commas.
-              </p>
-              <input
-                type="text"
-                name="receivers"
-                id="receivers"
-                value={settings.leadReceivers}
-                onChange={handleEmailsChange}
-                placeholder="e.g., admin@example.com, sales@example.com"
-                className={`block w-full rounded-md border-0 py-2.5 px-3 bg-[var(--background)] text-[var(--foreground)] shadow-sm ring-1 ring-inset placeholder:text-[var(--foreground-muted)] sm:text-sm sm:leading-6 transition-all outline-none ${
-                  emailError
-                    ? "ring-red-500 focus:ring-2 focus:ring-inset focus:ring-red-500"
-                    : "ring-[var(--border-color)] focus:ring-2 focus:ring-inset focus:ring-[var(--primary)]"
-                }`}
-              />
-              {/* Validation Error Message */}
-              {emailError && (
-                <p className="mt-2 text-sm text-red-500 font-medium flex items-center gap-1.5">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                  {emailError}
-                </p>
-              )}
+          <div>
+            <label className="text-[11px] font-bold uppercase tracking-widest text-gray-600 block mb-2">Destination Address</label>
+            <input type="email" value={preferences.adminEmail} onChange={(e) => setPreferences({ ...preferences, adminEmail: e.target.value })} className="w-full bg-[#F3F4F6] rounded-xl px-4 py-3.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[var(--primary,#8B5CF6)] focus:ring-opacity-30 transition-all border-none" placeholder="admin@yourcompany.com" />
+          </div>
+          
+          <label className="flex items-start gap-4 cursor-pointer p-5 border border-gray-100 rounded-[16px] bg-[#F8FAFC] hover:border-gray-200 transition-colors w-full">
+            <div className="mt-1">
+              <input type="checkbox" checked={preferences.urgentOnly} onChange={(e) => setPreferences({ ...preferences, urgentOnly: e.target.checked })} className="w-[18px] h-[18px] rounded-[4px] border-none text-[var(--primary,#8B5CF6)] bg-white shadow-sm focus:ring-[var(--primary,#8B5CF6)] focus:ring-offset-0 cursor-pointer" />
             </div>
-
-            {/* Toggles */}
-            <div className="space-y-2">
-              <ToggleSwitch
-                label="Urgent lead alerts"
-                description="Get notified immediately when a high-priority lead is captured."
-                isChecked={settings.urgentAlerts}
-                onToggle={() => handleToggle("urgentAlerts")}
-              />
-
-              <ToggleSwitch
-                label="After-hours alerts"
-                description="Receive notifications for leads captured outside of standard business hours."
-                isChecked={settings.afterHoursAlerts}
-                onToggle={() => handleToggle("afterHoursAlerts")}
-              />
-
-              {/* <ToggleSwitch
-                label="Daily summary"
-                description="Receive a digest of all leads captured at the end of each day."
-                isChecked={settings.dailySummary}
-                onToggle={() => handleToggle("dailySummary")}
-              />
-
-              <ToggleSwitch
-                label="Weekly summary"
-                description="Get a comprehensive report of lead activity every week."
-                isChecked={settings.weeklySummary}
-                onToggle={() => handleToggle("weeklySummary")}
-              /> */}
+            <div className="flex flex-col">
+              <span className="text-[15px] font-bold text-gray-900">Urgent / Bookings Only</span>
+              <span className="text-[12px] font-medium text-gray-500 mt-1 leading-relaxed">Ignore low-intent tire kickers. Perfect for high-volume sites.</span>
             </div>
+          </label>
+        </div>
 
-            {/* Action Buttons */}
-            <div className="mt-8 flex flex-col sm:flex-row justify-end gap-3">
-              {/* NEW: Test Notification Button */}
-              <button
-                type="button"
-                onClick={handleTestNotification}
-                disabled={isTesting || emailError !== ""}
-                className="rounded-md bg-[var(--background)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] shadow-sm ring-1 ring-inset ring-[var(--border-color)] hover:bg-[var(--card-bg)] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isTesting ? (
-                  <span className="w-4 h-4 border-2 border-[var(--foreground)] border-t-transparent rounded-full animate-spin"></span>
-                ) : (
-                  "✉️"
-                )}
-                {isTesting ? "Sending..." : "Send Test Alert"}
-              </button>
+        <div className="mt-10 pt-6 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+          <button 
+            onClick={handleTestEmail} 
+            disabled={isSendingTest} 
+            className="px-6 py-3.5 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-xs font-bold uppercase tracking-widest rounded-xl transition-all duration-300 disabled:opacity-50 flex items-center gap-2 w-full sm:w-auto justify-center shadow-sm"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            {isSendingTest ? "Triggering..." : "Send Test Alert"}
+          </button>
 
-              <button
-                type="submit"
-                disabled={isSaving || emailError !== ""}
-                className="rounded-md bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[var(--secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSaving ? "Saving..." : "Save Settings"}
-              </button>
-            </div>
-          </form>
+          <button 
+            onClick={handleSavePreferences} 
+            disabled={isSavingPrefs} 
+            className="px-8 py-3.5 bg-[#F3F4F6] text-gray-900 hover:bg-[#E5E7EB] text-xs font-black uppercase tracking-widest rounded-xl transition-all duration-300 disabled:opacity-50 w-full sm:w-auto"
+          >
+            {isSavingPrefs ? "Updating..." : "Save Rules"}
+          </button>
+        </div>
+      </div>
+
+      <div className={`fixed bottom-8 right-8 z-[100] transition-all duration-500 cubic-bezier(0.4, 0, 0.2, 1) ${toast.show ? "translate-y-0 opacity-100 scale-100" : "translate-y-8 opacity-0 scale-95 pointer-events-none"}`}>
+        <div className="flex items-center gap-4 py-3 px-5 rounded-2xl bg-white border border-gray-100 shadow-[0_20px_40px_rgba(0,0,0,0.08)]">
+          <div className={`w-2 h-2 rounded-full ${toast.type === "success" ? "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]" : "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"}`}></div>
+          <p className="text-[13px] font-bold tracking-tight text-gray-900 pr-2">{toast.message}</p>
         </div>
       </div>
     </div>

@@ -1,9 +1,13 @@
+// src/pages/_document.jsx
 import { Html, Head, Main, NextScript } from "next/document";
 
 export default function Document() {
   return (
     <Html lang="en">
-      <Head />
+      <Head>
+        {/* --- Google Search Console Verification --- */}
+        <meta name="google-site-verification" content="RU9Mmnrs0B-77ZemnbfT7X6KPyc9AF_AszHUc8m9mYo" />
+      </Head>
       <body>
         <script
           dangerouslySetInnerHTML={{
