@@ -313,6 +313,38 @@ Extract these facts silently as the user provides them:
 - customer_goal: (inspection, treatment, quote, callback, recurring_service, other)
 `;
       break;
+
+    case "Electrical":
+      categorySpecificFlow = `
+### ELECTRICAL SPECIFIC PROTOCOL ###
+
+1. SAFETY FIRST (CRITICAL & IMMEDIATE):
+- SMOKE, FIRE, LIVE WIRE, SHOCK (Emergency): If the user mentions smoke, active fire, visible sparking, exposed live wires, or electric shock, direct them to STAY CLEAR and contact emergency services or their utility company immediately. Do NOT provide any troubleshooting steps. Set urgency_level to "Emergency".
+- BURNING SMELL / HOT PANEL / ARCING (Urgent): If they report a burning odor, hot outlet/panel, or repeated arcing, advise them NOT to use the affected equipment/circuit if it is safe to avoid it. Prioritize an urgent electrician response. No DIY steps.
+
+2. CONDITIONAL DISCOVERY (DO NOT ASK AS A RIGID SCRIPT):
+Only ask these if the information is missing and necessary for the next step:
+- Outage Scope: Ask if the power outage is the whole property or just one area/circuit (helps distinguish utility outage vs. local fault).
+- Breaker Issue: Clarify if it is repeatedly tripping or a one-time event. (NEVER instruct them to repeatedly reset it).
+- Installation Request: Clarify what is being installed/upgraded (e.g., EV charger, panel, generator, lighting) at a high level.
+- Property Type: Residential or commercial?
+- Location: Ask for ZIP code/city to check service coverage area before proceeding.
+
+3. DIAGNOSIS & LEGAL BOUNDARIES:
+- Do NOT provide DIY electrical repair instructions or panel opening/testing advice.
+- Do NOT ask the customer to take unsafe electrical measurements.
+- Do NOT make electrical-code guarantees or provide safety certifications.
+
+4. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
+Extract these facts silently as the user provides them:
+- electrical_service_type: (outage, breaker, sparking, panel, EV_charger, generator, lighting, wiring, unknown, etc.)
+- outage_scope: (whole_property, partial, unknown)
+- hazard_sign: (spark, smoke, fire, burning_smell, shock, live_wire, none)
+- property_type: (residential, commercial, unknown)
+- safety_trigger: (spark, smoke, fire, shock, live_wire, none)
+- customer_goal: (repair, inspection, install, quote, other)
+`;
+      break;
   }
 
   let instructions = `[SYSTEM POLICY VERSION: ${POLICY_VERSION}]
@@ -346,7 +378,7 @@ FLUID CONVERSATIONAL RULES (CRITICAL):
     instructions += `\n\nCURRENTLY COLLECTED DATA:\n${JSON.stringify(currentLeadData || {})}`;
     instructions += `\n\n17. LENGTH CONSTRAINT: Keep responses under 2 to 3 short sentences.`;
     instructions += `\n\nJSON OUTPUT REQUIREMENT:
-Output strictly as a raw JSON object matching this schema. Note that 'business_context' contains standard fields PLUS dynamic industry fields (like hvac_service_type, pest_type, safety_trigger, etc.) based on the active protocol:
+Output strictly as a raw JSON object matching this schema. Note that 'business_context' contains standard fields PLUS dynamic industry fields (like hvac_service_type, electrical_service_type, safety_trigger, etc.) based on the active protocol:
 {
   "reply": "Your conversational response confirming or offering next steps...",
   "suggested_shortcuts": ["Book a Tech", "Request a Callback"],
@@ -377,7 +409,10 @@ Output strictly as a raw JSON object matching this schema. Note that 'business_c
       "pest_type": null,
       "activity_location": null,
       "severity_description": null,
-      "timeframe": null
+      "timeframe": null,
+      "electrical_service_type": null,
+      "outage_scope": null,
+      "hazard_sign": null
     },
     "booking_request": {
       "request_type": "consultation | callback | none",
@@ -407,4 +442,4 @@ Output strictly as a raw JSON object matching this schema. Note that 'business_c
   }
 
   return { instructions, botConfig };
-}
+}ssss
