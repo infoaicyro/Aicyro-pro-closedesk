@@ -241,6 +241,43 @@ Extract these facts silently as the user provides them:
 `;
       break;
 
+    case "Roofing":
+      categorySpecificFlow = `
+### ROOFING SPECIFIC PROTOCOL ###
+
+1. SAFETY FIRST (CRITICAL & IMMEDIATE):
+- STRUCTURAL COLLAPSE, FALLEN POWER LINES, FIRE (Emergency): If the user mentions structural sagging, signs of collapse, fallen power lines on the roof, or active fire, direct the customer to emergency services immediately. Prioritize safety. Set urgency_level to "Emergency".
+- DO NOT ADVISE ROOF ACCESS: Under NO circumstances should you advise or ask the customer to climb onto the roof or perform their own physical inspection.
+- SEVERE ACTIVE LEAK / MAJOR STORM OPENING (Urgent): If there is a severe active leak or major storm damage leaving the home open to the elements, prioritize an emergency inspection or tarp service if offered.
+
+2. CONDITIONAL DISCOVERY (DO NOT ASK AS A RIGID SCRIPT):
+Only ask these if the information is missing and necessary for the next step:
+- Active Leak: Ask if water is currently entering the property (to determine urgency).
+- Storm Damage Timing: Ask approximately when the storm or damage event occurred.
+- Customer Intent: Clarify if they are looking for an immediate repair, a general inspection, or a full replacement estimate.
+- Roof Type: Ask if they know their roof type (asphalt, metal, flat, tile) but NEVER require technical knowledge.
+- Property Type: Residential or commercial?
+- Insurance: Ask if an inspection or claim has already been started ONLY if helpful to the workflow. (Never make coverage promises).
+- Location: Ask for ZIP code/city to check service coverage area before proceeding.
+
+3. DIAGNOSIS & LEGAL BOUNDARIES:
+- Do NOT make insurance claim guarantees or coverage promises.
+- Do NOT make structural-certification claims or automated storm-damage valuations.
+- Do NOT provide DIY repair instructions.
+
+4. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
+Extract these facts silently as the user provides them:
+- roofing_service_type: (leak, storm, repair, inspection, replacement, tarp, maintenance, other)
+- active_water_entry: (true, false, unknown)
+- storm_date: (customer-stated approximate date/time)
+- roof_type: (asphalt, metal, tile, flat, unknown)
+- property_type: (residential, commercial, unknown)
+- insurance_status: (claim_open, not_open, unknown)
+- safety_trigger: (structural, power_line, fire, none)
+- customer_goal: (inspection, estimate, repair, tarp, callback, other)
+`;
+      break;
+
     case "Pest Control":
       categorySpecificFlow = `
 ### PEST CONTROL SPECIFIC PROTOCOL ###
@@ -282,7 +319,7 @@ FLUID CONVERSATIONAL RULES (CRITICAL):
     instructions += `\n\nCURRENTLY COLLECTED DATA:\n${JSON.stringify(currentLeadData || {})}`;
     instructions += `\n\n17. LENGTH CONSTRAINT: Keep responses under 2 to 3 short sentences.`;
     instructions += `\n\nJSON OUTPUT REQUIREMENT:
-Output strictly as a raw JSON object matching this schema. Note that 'business_context' contains standard fields PLUS dynamic industry fields (like hvac_service_type, restoration_type, safety_trigger, etc.) based on the active protocol:
+Output strictly as a raw JSON object matching this schema. Note that 'business_context' contains standard fields PLUS dynamic industry fields (like hvac_service_type, roofing_service_type, safety_trigger, etc.) based on the active protocol:
 {
   "reply": "Your conversational response confirming or offering next steps...",
   "suggested_shortcuts": ["Book a Tech", "Request a Callback"],
@@ -292,6 +329,11 @@ Output strictly as a raw JSON object matching this schema. Note that 'business_c
       "industry": null, 
       "business_problem": null, 
       "website": null,
+      "property_type": null,
+      "customer_goal": null,
+      "safety_trigger": null,
+      "insurance_status": null,
+      "affected_areas": null,
       "hvac_service_type": null,
       "system_type": null,
       "system_status": null,
@@ -301,11 +343,10 @@ Output strictly as a raw JSON object matching this schema. Note that 'business_c
       "restoration_type": null,
       "source_status": null,
       "event_timeframe": null,
-      "insurance_status": null,
-      "affected_areas": null,
-      "safety_trigger": null,
-      "property_type": null,
-      "customer_goal": null
+      "roofing_service_type": null,
+      "active_water_entry": null,
+      "storm_date": null,
+      "roof_type": null
     },
     "booking_request": {
       "request_type": "consultation | callback | none",
