@@ -54,6 +54,7 @@ export default function ChatbotSettings({ onNavigate }) {
   });
 
   const [config, setConfig] = useState({
+    serviceCategory: "General", // <-- NEW: Added Service Category for dynamic flows
     botAvatar: "ai_spark",
     customAvatarSvg: "",
     botName: "Aicyro Front Desk",
@@ -546,7 +547,29 @@ export default function ChatbotSettings({ onNavigate }) {
                 />
               </div>
 
-              <div className="space-y-2">
+              {/* --- NEW SERVICE CATEGORY FIELD --- */}
+              <div className="space-y-2 pt-4 border-t border-[var(--border-color)]">
+                <label className="text-[11px] font-bold text-[var(--foreground-muted)] uppercase tracking-widest">
+                  Service Category (Industry)
+                  <InfoTooltip text="Select your industry to load optimized AI chat flows and vision diagnostics." />
+                </label>
+                <select
+                  name="serviceCategory"
+                  value={config.serviceCategory || "General"}
+                  onChange={handleInputChange}
+                  className="w-full bg-[var(--background)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-sm focus:border-[var(--primary)] outline-none appearance-none cursor-pointer"
+                >
+                  <option value="General">General / Software</option>
+                  <option value="HVAC">HVAC & Air Conditioning</option>
+                  <option value="Plumbing">Plumbing</option>
+                  <option value="Pest Control">Pest Control</option>
+                  <option value="Electrical">Electrical</option>
+                  <option value="Roofing">Roofing</option>
+                  <option value="Appliance Repair">Appliance Repair</option>
+                </select>
+              </div>
+
+              <div className="space-y-2 pt-4 border-t border-[var(--border-color)]">
                 <label className="text-[11px] font-bold text-[var(--foreground-muted)] uppercase tracking-widest">
                   Company Context
                   <InfoTooltip text="A brief description of your business. The AI uses this to answer general inquiries." />
