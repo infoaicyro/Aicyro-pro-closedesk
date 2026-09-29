@@ -1,8 +1,14 @@
+// src/components/Dashboard/Settings/Chatbotsetting.jsx
 "use client";
 
 import { useState, useEffect } from "react";
 import { db } from "../../../lib/firebase";
 import { ref, set, get } from "firebase/database";
+
+// 🔥 TICKET 14
+import { createPulseLogger } from "../../../lib/loggerPresets";
+import { recordAuditTrail } from "../../../lib/auditTracer";
+const pulseLogger = createPulseLogger("ChatbotSettings");
 
 const AVATAR_OPTIONS = [
   { id: "ai_spark", label: "AI Spark", src: "/avatars/ai-spark.svg" },
@@ -48,6 +54,7 @@ export default function ChatbotSettings({ onNavigate }) {
   });
 
   const [config, setConfig] = useState({
+    serviceCategory: "General", // <-- NEW: Added Service Category for dynamic flows
     botAvatar: "ai_spark",
     customAvatarSvg: "",
     botName: "Aicyro Front Desk",
@@ -81,8 +88,8 @@ export default function ChatbotSettings({ onNavigate }) {
     bookingRule: "require_all",
     unavailableBehavior: "collect_lead",
     aiModel: "gpt-4o-mini",
-    temperature: 0.4, // Bumped for conversational fluidity
-    strictValidation: false, // Disabled by default to prevent rigid forms
+    temperature: 0.4, 
+    strictValidation: false, 
   });
 
   const showToast = (message, type = "success") => {
@@ -102,7 +109,6 @@ export default function ChatbotSettings({ onNavigate }) {
           setConfig((prev) => ({
             ...prev,
             ...data,
-            // Ensure arrays exist even if DB returns null/undefined
             leadCaptureFields: data.leadCaptureFields || prev.leadCaptureFields,
             businessIntelligenceFields:
               data.businessIntelligenceFields ||
@@ -177,6 +183,15 @@ export default function ChatbotSettings({ onNavigate }) {
         ...cleanedConfig,
         updated_at: new Date().toISOString(),
       });
+      
+      // 🚨 TICKET 14: Log Configuration Change with Previous and New state
+      recordAuditTrail(pulseLogger, "configuration_changed", {
+        who: localStorage.getItem("currentSuperAdmin") || localStorage.getItem("currentUser") || "unknown",
+        target: "settings/chatbot_config",
+        previousState: config, 
+        newState: cleanedConfig 
+      });
+      
       setConfig(cleanedConfig);
       showToast("Chatbot settings updated successfully!", "success");
     } catch (error) {
@@ -271,11 +286,8 @@ export default function ChatbotSettings({ onNavigate }) {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 pb-10">
-        {/* ==========================================
-            LEFT COLUMN (Identity & Persona)
-        ========================================== */}
+        {/* LEFT COLUMN (Identity & Persona) */}
         <div className="flex flex-col gap-8">
-          {/* Card 1: Display & Branding */}
           <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-6 md:p-8 shadow-sm">
             <h2 className="text-lg font-bold text-[var(--foreground)] tracking-tight border-b border-[var(--border-color)] pb-4 mb-6">
               Display & Branding
@@ -381,7 +393,6 @@ export default function ChatbotSettings({ onNavigate }) {
                 />
               </div>
 
-              {/* Bot Voice Selection & Test Button */}
               <div className="space-y-2 pt-4 border-t border-[var(--border-color)]">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-bold text-[var(--foreground-muted)] uppercase tracking-widest flex items-center">
@@ -449,7 +460,6 @@ export default function ChatbotSettings({ onNavigate }) {
             </div>
           </div>
 
-          {/* Card 2: Core Prompt & Persona */}
           <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-6 md:p-8 shadow-sm">
             <h2 className="text-lg font-bold text-[var(--foreground)] tracking-tight border-b border-[var(--border-color)] pb-4 mb-6">
               Prompt Engineering & Persona
@@ -537,7 +547,29 @@ export default function ChatbotSettings({ onNavigate }) {
                 />
               </div>
 
-              <div className="space-y-2">
+              {/* --- NEW SERVICE CATEGORY FIELD --- */}
+              <div className="space-y-2 pt-4 border-t border-[var(--border-color)]">
+                <label className="text-[11px] font-bold text-[var(--foreground-muted)] uppercase tracking-widest">
+                  Service Category (Industry)
+                  <InfoTooltip text="Select your industry to load optimized AI chat flows and vision diagnostics." />
+                </label>
+                <select
+                  name="serviceCategory"
+                  value={config.serviceCategory || "General"}
+                  onChange={handleInputChange}
+                  className="w-full bg-[var(--background)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-sm focus:border-[var(--primary)] outline-none appearance-none cursor-pointer"
+                >
+                  <option value="General">General / Software</option>
+                  <option value="HVAC">HVAC & Air Conditioning</option>
+                  <option value="Plumbing">Plumbing</option>
+                  <option value="Pest Control">Pest Control</option>
+                  <option value="Electrical">Electrical</option>
+                  <option value="Roofing">Roofing</option>
+                  <option value="Appliance Repair">Appliance Repair</option>
+                </select>
+              </div>
+
+              <div className="space-y-2 pt-4 border-t border-[var(--border-color)]">
                 <label className="text-[11px] font-bold text-[var(--foreground-muted)] uppercase tracking-widest">
                   Company Context
                   <InfoTooltip text="A brief description of your business. The AI uses this to answer general inquiries." />
@@ -578,11 +610,8 @@ export default function ChatbotSettings({ onNavigate }) {
           </div>
         </div>
 
-        {/* ==========================================
-            RIGHT COLUMN (Rules, Flow & Data)
-        ========================================== */}
+        {/* RIGHT COLUMN (Rules, Flow & Data) */}
         <div className="flex flex-col gap-8">
-          {/* Card 3: Live Agent Preview */}
           <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-6 md:p-8 shadow-sm flex flex-col items-center justify-center relative overflow-hidden">
             <h2 className="text-sm font-bold text-[var(--foreground-muted)] tracking-widest uppercase mb-6">
               See CloseDesk in action
@@ -614,13 +643,11 @@ export default function ChatbotSettings({ onNavigate }) {
             </div>
           </div>
 
-          {/* Card 4: Chat Flow & Rules */}
           <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-6 md:p-8 shadow-sm">
             <h2 className="text-lg font-bold text-[var(--foreground)] tracking-tight border-b border-[var(--border-color)] pb-4 mb-6">
               Chat Flow & Rules
             </h2>
             <div className="space-y-6">
-              {/* Contact Information Capture */}
               <div className="space-y-3">
                 <label className="text-[11px] font-bold text-[var(--foreground-muted)] uppercase tracking-widest flex justify-between items-center">
                   <span>
@@ -665,7 +692,6 @@ export default function ChatbotSettings({ onNavigate }) {
                 </div>
               </div>
 
-              {/* Business Intelligence Extraction */}
               <div className="space-y-3 pt-4 border-t border-[var(--border-color)]">
                 <label className="text-[11px] font-bold text-[var(--foreground-muted)] uppercase tracking-widest flex justify-between items-center">
                   <span>
@@ -785,7 +811,6 @@ export default function ChatbotSettings({ onNavigate }) {
             </div>
           </div>
 
-          {/* Card 5: Knowledge Base & Routing */}
           <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-6 md:p-8 shadow-sm">
             <h2 className="text-lg font-bold text-[var(--foreground)] tracking-tight border-b border-[var(--border-color)] pb-4 mb-6">
               Knowledge & Routing
@@ -943,7 +968,6 @@ export default function ChatbotSettings({ onNavigate }) {
         </div>
       </div>
 
-      {/* TOAST SYSTEM */}
       <div
         className={`fixed bottom-6 right-6 z-[100] transition-all duration-500 ease-out ${toast.show ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0 pointer-events-none"}`}
       >
