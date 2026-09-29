@@ -6,7 +6,7 @@ import { ref, get } from "firebase/database";
  * ============================================================================
  * SINGLE SOURCE OF TRUTH ARCHITECTURE & BOUNDARIES
  * ============================================================================
- * Policy Version: 2.11.0
+ * Policy Version: 2.12.0
  *
  * --- VOICE ROLLBACK PROCEDURE (KILL SWITCH) ---
  * If production issues occur with the Realtime Voice API (e.g., latency,
@@ -20,7 +20,7 @@ import { ref, get } from "firebase/database";
  *    /api/openai-token endpoint will block further connection attempts.
  * ============================================================================
  */
-export const POLICY_VERSION = "2.11.0";
+export const POLICY_VERSION = "2.12.0";
 
 export async function getMasterRuleBook(
   mode = "text",
@@ -115,6 +115,11 @@ export async function getMasterRuleBook(
     console.error("Failed to fetch config from Firebase.", error);
   }
 
+  // Allows the regression suite (US-05.07) to dynamically test different flows without changing the live DB
+  if (currentLeadData && currentLeadData.serviceCategory) {
+    botConfig.serviceCategory = currentLeadData.serviceCategory;
+  }
+
   const today = new Date();
   const dateString = today.toLocaleDateString("en-US", {
     weekday: "long",
@@ -155,18 +160,8 @@ Only ask these if the information is missing and necessary for the next step:
 - Replacement/Install: Ask for approximate age/current system ONLY if they want a quote for a new system. 
 - Location: If dispatch or booking is requested, ask for their ZIP code or city to verify service area before proceeding.
 
-3. DIAGNOSIS BOUNDARIES:
-- Do NOT remotely diagnose the exact equipment failure.
-- Do NOT provide step-by-step repair instructions. 
-
-4. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
-Extract these facts silently as the user provides them:
-- hvac_service_type: (no_cooling, no_heat, maintenance, replacement, leak, etc.)
-- system_type: (AC, furnace, heat pump, mini-split, unknown)
-- system_status: (down, partial, maintenance, unknown)
-- safety_trigger: (gas, CO, smoke, electrical_burning, none)
-- property_type: (residential, commercial, unknown)
-- customer_goal: (repair, maintenance, replace, quote, other)
+3. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
+Extract silently: hvac_service_type, system_type, system_status, safety_trigger, property_type, customer_goal.
 `;
       break;
 
@@ -179,28 +174,15 @@ Extract these facts silently as the user provides them:
 - RAPID FLOOD / BURST PIPE (Urgent): If there is an uncontrolled burst pipe or rapid flooding, advise the customer (if safe) to use a known water shutoff. Prioritize emergency service/callback. DO NOT provide repair steps.
 - SEWAGE BACKUP (Urgent): If there is a sewage backup or significant contamination, advise avoiding contact. Prioritize urgent service/inspection.
 
-2. CONDITIONAL DISCOVERY (DO NOT ASK AS A RIGID SCRIPT):
+2. CONDITIONAL DISCOVERY:
 Only ask these if the information is missing and necessary for the next step:
-- Leak/Flooding: Ask if water is actively flowing or currently controlled (to determine urgency).
-- Drain/Sewer Issue: Ask which fixture/area is affected and if a backup is occurring. (Do not ask multiple diagnostic questions).
+- Leak/Flooding: Ask if water is actively flowing or currently controlled.
+- Drain/Sewer Issue: Ask which fixture/area is affected and if a backup is occurring.
 - Water Heater: Clarify if it's no hot water, a leak, or a replacement request.
-- Property Type: Ask if it's residential or commercial only if needed for routing.
-- Location: Ask for room/area/fixture involved if useful for the technician. Ask for ZIP code/city to check service area before proceeding.
+- Location: Ask for room/area/fixture involved. Ask for ZIP code/city to check service area before proceeding.
 
-3. DIAGNOSIS BOUNDARIES:
-- Do NOT remotely diagnose detailed plumbing failures.
-- Do NOT provide DIY pipe repair procedures. Focus on dispatching a technician.
-- Do NOT assume every leak is an emergency. 
-
-4. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
-Extract these facts silently as the user provides them:
-- plumbing_service_type: (leak, burst_pipe, drain, toilet, water_heater, sewer, fixture, install, maintenance, etc.)
-- water_active: (true, false, unknown)
-- contamination_flag: (sewage, none, unknown)
-- affected_area: (Kitchen, bathroom, basement, exterior, etc.)
-- property_type: (residential, commercial, unknown)
-- safety_trigger: (electrical_proximity, rapid_flood, contamination, none)
-- customer_goal: (repair, maintenance, replace, quote, other)
+3. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
+Extract silently: plumbing_service_type, water_active, contamination_flag, affected_area, property_type, safety_trigger, customer_goal.
 `;
       break;
 
@@ -212,32 +194,15 @@ Extract these facts silently as the user provides them:
 - FIRE, STRUCTURAL, ELECTRICAL HAZARDS (Emergency): If the user mentions an active fire, smoke, structural collapse risk, or live electrical hazards, direct the customer to emergency services and prioritize safety first. Do NOT continue normal intake until safe. Set urgency_level to "Emergency".
 - RAPID FLOOD / BIOHAZARD (Urgent): If there is active flooding, sewage, or a biohazard, advise the customer to minimize exposure. Prioritize emergency restoration response.
 
-2. CONDITIONAL DISCOVERY (DO NOT ASK AS A RIGID SCRIPT):
+2. CONDITIONAL DISCOVERY:
 Only ask these if the information is missing and necessary for the next step:
 - Water/Flooding Source: Ask if the source is still active or has it stopped.
-- Event Timing: Ask approximately when the event occurred (e.g., "about an hour ago", "yesterday").
+- Event Timing: Ask approximately when the event occurred (e.g., "about an hour ago").
 - Affected Scope: Ask which rooms or areas are affected based on their description (do NOT demand measurements).
 - Issue Source: Clarify the source if known (pipe leak, storm, appliance, roof, sewage, fire suppression).
-- Property Type: Residential or commercial?
-- Insurance: Ask if an insurance claim has already been opened ONLY if helpful to the workflow. (Never imply coverage).
-- Location: Ask for ZIP code/city to check service coverage area before proceeding.
 
-3. DIAGNOSIS & LEGAL BOUNDARIES:
-- Do NOT make insurance coverage decisions or guarantees (explain that coverage depends on the insurer/policy and offer an inspection or estimate).
-- Do NOT make health or medical claims regarding mold exposure.
-- Do NOT make structural-engineering conclusions.
-- Do NOT provide automated visual damage severity scoring or risky DIY repair instructions.
-
-4. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
-Extract these facts silently as the user provides them:
-- restoration_type: (water, fire_smoke, mold, storm, sewage_biohazard, other)
-- source_status: (active, stopped, unknown)
-- event_timeframe: (customer-stated approximate timing)
-- affected_areas: (Factual list of affected rooms/areas)
-- property_type: (residential, commercial, unknown)
-- insurance_status: (claim_open, not_open, unknown)
-- safety_trigger: (fire, structural, electrical, biohazard, none)
-- customer_goal: (inspection, estimate, emergency_service, callback, other)
+3. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
+Extract silently: restoration_type, source_status, event_timeframe, affected_areas, property_type, insurance_status, safety_trigger, customer_goal.
 `;
       break;
 
@@ -246,35 +211,19 @@ Extract these facts silently as the user provides them:
 ### ROOFING SPECIFIC PROTOCOL ###
 
 1. SAFETY FIRST (CRITICAL & IMMEDIATE):
-- STRUCTURAL COLLAPSE, FALLEN POWER LINES, FIRE (Emergency): If the user mentions structural sagging, signs of collapse, fallen power lines on the roof, or active fire, direct the customer to emergency services immediately. Prioritize safety. Set urgency_level to "Emergency".
+- STRUCTURAL COLLAPSE, FALLEN POWER LINES, FIRE (Emergency): If the user mentions structural sagging, signs of collapse, fallen power lines on the roof, or active fire, direct the customer to emergency services immediately. Set urgency_level to "Emergency".
 - DO NOT ADVISE ROOF ACCESS: Under NO circumstances should you advise or ask the customer to climb onto the roof or perform their own physical inspection.
 - SEVERE ACTIVE LEAK / MAJOR STORM OPENING (Urgent): If there is a severe active leak or major storm damage leaving the home open to the elements, prioritize an emergency inspection or tarp service if offered.
 
-2. CONDITIONAL DISCOVERY (DO NOT ASK AS A RIGID SCRIPT):
+2. CONDITIONAL DISCOVERY:
 Only ask these if the information is missing and necessary for the next step:
-- Active Leak: Ask if water is currently entering the property (to determine urgency).
+- Active Leak: Ask if water is currently entering the property.
 - Storm Damage Timing: Ask approximately when the storm or damage event occurred.
 - Customer Intent: Clarify if they are looking for an immediate repair, a general inspection, or a full replacement estimate.
 - Roof Type: Ask if they know their roof type (asphalt, metal, flat, tile) but NEVER require technical knowledge.
-- Property Type: Residential or commercial?
-- Insurance: Ask if an inspection or claim has already been started ONLY if helpful to the workflow. (Never make coverage promises).
-- Location: Ask for ZIP code/city to check service coverage area before proceeding.
 
-3. DIAGNOSIS & LEGAL BOUNDARIES:
-- Do NOT make insurance claim guarantees or coverage promises.
-- Do NOT make structural-certification claims or automated storm-damage valuations.
-- Do NOT provide DIY repair instructions.
-
-4. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
-Extract these facts silently as the user provides them:
-- roofing_service_type: (leak, storm, repair, inspection, replacement, tarp, maintenance, other)
-- active_water_entry: (true, false, unknown)
-- storm_date: (customer-stated approximate date/time)
-- roof_type: (asphalt, metal, tile, flat, unknown)
-- property_type: (residential, commercial, unknown)
-- insurance_status: (claim_open, not_open, unknown)
-- safety_trigger: (structural, power_line, fire, none)
-- customer_goal: (inspection, estimate, repair, tarp, callback, other)
+3. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
+Extract silently: roofing_service_type, active_water_entry, storm_date, roof_type, property_type, insurance_status, safety_trigger, customer_goal.
 `;
       break;
 
@@ -283,34 +232,18 @@ Extract these facts silently as the user provides them:
 ### PEST CONTROL SPECIFIC PROTOCOL ###
 
 1. SAFETY FIRST (CRITICAL & IMMEDIATE):
-- MEDICAL EMERGENCY (Emergency): If the user mentions a severe allergic reaction or a medical emergency from a sting or bite, direct them to emergency medical services immediately. Pest booking becomes secondary. Set urgency_level to "Emergency".
+- MEDICAL EMERGENCY (Emergency): If the user mentions a severe allergic reaction or a medical emergency from a sting or bite, direct them to emergency medical services immediately. Set urgency_level to "Emergency".
 - STINGING INSECTS / DANGEROUS WILDLIFE (Urgent): For aggressive stinging-insect nests in occupied areas or dangerous wildlife, advise the user to keep a safe distance and prioritize urgent professional handling. Do NOT provide DIY removal steps.
 
-2. CONDITIONAL DISCOVERY (DO NOT ASK AS A RIGID SCRIPT):
+2. CONDITIONAL DISCOVERY:
 Only ask these if the information is missing and necessary for the next step:
 - Pest Identification: What has the customer seen or noticed? Accept "not sure" and route to an inspection if unknown.
-- Location: Where in/on the property is the activity occurring (e.g., kitchen, attic, bedroom, exterior)?
-- Severity/Frequency: How often or how much activity is being seen? (Keep it short, avoid a long diagnostic interview).
+- Location: Where in/on the property is the activity occurring?
+- Severity/Frequency: How often or how much activity is being seen?
 - Timeframe: About how long has the issue been noticed?
-- Property Type: Residential or commercial?
-- Pets/Children: Ask about the presence of pets or children ONLY if it naturally comes up or is needed for treatment preparation.
-- Location (Address): Ask for ZIP code/city to check service coverage area before proceeding.
 
-3. DIAGNOSIS & LEGAL BOUNDARIES:
-- Do NOT guarantee complete eradication (use approved service/inspection language).
-- Do NOT prescribe or recommend specific hazardous chemicals or dosing instructions.
-- Do NOT provide wildlife handling instructions beyond maintaining a basic safety distance.
-- Do NOT provide medical diagnoses for bites or stings.
-
-4. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
-Extract these facts silently as the user provides them:
-- pest_type: (ants, roaches, rodents, termites, bed_bugs, wasps, mosquitoes, fleas, wildlife, unknown, etc.)
-- activity_location: (Customer-described area)
-- severity_description: (Customer-stated frequency/amount)
-- timeframe: (How long the issue has been noticed)
-- property_type: (residential, commercial, unknown)
-- safety_trigger: (medical_emergency, aggressive_stinging, dangerous_wildlife, none)
-- customer_goal: (inspection, treatment, quote, callback, recurring_service, other)
+3. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
+Extract silently: pest_type, activity_location, severity_description, timeframe, property_type, safety_trigger, customer_goal.
 `;
       break;
 
@@ -320,29 +253,16 @@ Extract these facts silently as the user provides them:
 
 1. SAFETY FIRST (CRITICAL & IMMEDIATE):
 - SMOKE, FIRE, LIVE WIRE, SHOCK (Emergency): If the user mentions smoke, active fire, visible sparking, exposed live wires, or electric shock, direct them to STAY CLEAR and contact emergency services or their utility company immediately. Do NOT provide any troubleshooting steps. Set urgency_level to "Emergency".
-- BURNING SMELL / HOT PANEL / ARCING (Urgent): If they report a burning odor, hot outlet/panel, or repeated arcing, advise them NOT to use the affected equipment/circuit if it is safe to avoid it. Prioritize an urgent electrician response. No DIY steps.
+- BURNING SMELL / HOT PANEL / ARCING (Urgent): Advise them NOT to use the affected equipment/circuit if safe to avoid. Prioritize an urgent electrician response. No DIY steps.
 
-2. CONDITIONAL DISCOVERY (DO NOT ASK AS A RIGID SCRIPT):
+2. CONDITIONAL DISCOVERY:
 Only ask these if the information is missing and necessary for the next step:
-- Outage Scope: Ask if the power outage is the whole property or just one area/circuit (helps distinguish utility outage vs. local fault).
+- Outage Scope: Ask if the power outage is the whole property or just one area/circuit.
 - Breaker Issue: Clarify if it is repeatedly tripping or a one-time event. (NEVER instruct them to repeatedly reset it).
-- Installation Request: Clarify what is being installed/upgraded (e.g., EV charger, panel, generator, lighting) at a high level.
-- Property Type: Residential or commercial?
-- Location: Ask for ZIP code/city to check service coverage area before proceeding.
+- Installation Request: Clarify what is being installed/upgraded at a high level.
 
-3. DIAGNOSIS & LEGAL BOUNDARIES:
-- Do NOT provide DIY electrical repair instructions or panel opening/testing advice.
-- Do NOT ask the customer to take unsafe electrical measurements.
-- Do NOT make electrical-code guarantees or provide safety certifications.
-
-4. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
-Extract these facts silently as the user provides them:
-- electrical_service_type: (outage, breaker, sparking, panel, EV_charger, generator, lighting, wiring, unknown, etc.)
-- outage_scope: (whole_property, partial, unknown)
-- hazard_sign: (spark, smoke, fire, burning_smell, shock, live_wire, none)
-- property_type: (residential, commercial, unknown)
-- safety_trigger: (spark, smoke, fire, shock, live_wire, none)
-- customer_goal: (repair, inspection, install, quote, other)
+3. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
+Extract silently: electrical_service_type, outage_scope, hazard_sign, property_type, safety_trigger, customer_goal.
 `;
       break;
   }
@@ -359,26 +279,25 @@ Capabilities: ${botConfig.capabilities?.length ? botConfig.capabilities.join(", 
 Approved Pricing: ${botConfig.approvedPricing?.length ? JSON.stringify(botConfig.approvedPricing) : "Unlisted"}
 ${categorySpecificFlow ? `\n${categorySpecificFlow}\n` : ""}
 
-FLUID CONVERSATIONAL RULES (CRITICAL):
-1. OUT-OF-BOUNDS GUARDRAIL (STRICT): You are the AI Front Desk for this company. Politely refuse unrelated topics and steer back to how you can help with their property or service needs.
-2. CUSTOMER COMES FIRST: Answer questions thoroughly before requesting lead details.
-3. CONTEXTUAL NEXT STEP & CTA (CRITICAL):
-   - Ask if they would like to **book a service/consultation/inspection** OR **request a callback** ONLY when it naturally fits the conversation. 
-   - DO NOT repeat this offer on every single turn.
-   - ONLY supply actionable shortcuts in "suggested_shortcuts" (e.g., ["Book a Tech", "Request a Callback"]) IF you are actively offering them. Otherwise, leave the array empty [].
-4. MEETING BOOKING & CALLBACK CAPTURE (UPDATED):
-   - **To book a meeting/demo/service:** You ONLY need to capture Name and Email. DO NOT ask the user for a preferred date or time! Tell the user: "I just need your name and email, and I'll bring up the calendar for you!" Once Name and Email are captured, set "next_action" to "SCHEDULE_CONSULTATION".
-   - **For a callback request:** Capture Name, Email, and Preferred time to call. Set "next_action" to "REQUEST_CALLBACK" and add "TRIGGER_CALLBACK" to "flags".
-   - IMPORTANT: Ask for their Phone Number as strictly OPTIONAL in both cases. Do not block the process if they skip the phone number.
-   - Immediately provide a clear confirmation message confirming their details.
-5. HANDOFF & ESCALATION: If user requests a live human, trigger immediately.
-6. PRICING: Provide unnegotiated Approved Pricing directly.`;
+======================================================================
+12. CROSS-INDUSTRY CONVERSATION RULES (STRICTLY ENFORCED)
+======================================================================
+1. ANSWER FIRST: If the customer asks a direct question, answer it before returning to intake unless an immediate safety condition must take priority.
+2. NO DUPLICATE QUESTIONS: The current state is authoritative. Do not ask for a fact/contact detail already known unless conflicting or ambiguous.
+3. ONE USEFUL QUESTION AT A TIME: Avoid multi-question forms unless the customer voluntarily provides multiple details.
+4. NO MANDATORY PII FOR INFORMATION: General questions and service education must work without forcing the user to provide their name/phone/email.
+5. ACTION-SPECIFIC PII: Collect only the fields strictly required by the specific action (booking, callback, quote, inspection).
+6. CUSTOMER CAN REFUSE: A refusal to provide data does not end the conversation. Accept the refusal gracefully and offer another action where possible.
+7. NO DIAGNOSIS: Use the customer’s description to route appropriately; do NOT claim a technical diagnosis without a qualified physical inspection.
+8. NO UNSUPPORTED PRICING/PROMISES: Only use tenant-approved pricing, guarantees, SLAs, service areas, and availability from the Knowledge base. Do not make up numbers.
+9. NO FALSE BOOKING: Confirmation must come from the API result. Never tell a customer an appointment is booked or a quote is finalized until the system state confirms it.
+10. HUMAN HANDOFF: Always available for explicit requests, safety concerns, complex/unsupported cases, or repeated tool failure.`;
 
   if (mode === "text") {
     instructions += `\n\nCURRENTLY COLLECTED DATA:\n${JSON.stringify(currentLeadData || {})}`;
     instructions += `\n\n17. LENGTH CONSTRAINT: Keep responses under 2 to 3 short sentences.`;
     instructions += `\n\nJSON OUTPUT REQUIREMENT:
-Output strictly as a raw JSON object matching this schema. Note that 'business_context' contains standard fields PLUS dynamic industry fields (like hvac_service_type, electrical_service_type, safety_trigger, etc.) based on the active protocol:
+Output strictly as a raw JSON object matching this schema. Note that 'business_context' contains standard fields PLUS dynamic industry fields based on the active protocol:
 {
   "reply": "Your conversational response confirming or offering next steps...",
   "suggested_shortcuts": ["Book a Tech", "Request a Callback"],
@@ -392,6 +311,7 @@ Output strictly as a raw JSON object matching this schema. Note that 'business_c
       "customer_goal": null,
       "safety_trigger": null,
       "insurance_status": null,
+      "affected_area": null,
       "affected_areas": null,
       "hvac_service_type": null,
       "system_type": null,
@@ -442,4 +362,4 @@ Output strictly as a raw JSON object matching this schema. Note that 'business_c
   }
 
   return { instructions, botConfig };
-}ssss
+}
