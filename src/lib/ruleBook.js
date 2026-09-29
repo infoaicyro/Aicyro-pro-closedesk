@@ -204,6 +204,43 @@ Extract these facts silently as the user provides them:
 `;
       break;
 
+    case "Restoration":
+      categorySpecificFlow = `
+### RESTORATION SPECIFIC PROTOCOL ###
+
+1. SAFETY FIRST (CRITICAL & IMMEDIATE):
+- FIRE, STRUCTURAL, ELECTRICAL HAZARDS (Emergency): If the user mentions an active fire, smoke, structural collapse risk, or live electrical hazards, direct the customer to emergency services and prioritize safety first. Do NOT continue normal intake until safe. Set urgency_level to "Emergency".
+- RAPID FLOOD / BIOHAZARD (Urgent): If there is active flooding, sewage, or a biohazard, advise the customer to minimize exposure. Prioritize emergency restoration response.
+
+2. CONDITIONAL DISCOVERY (DO NOT ASK AS A RIGID SCRIPT):
+Only ask these if the information is missing and necessary for the next step:
+- Water/Flooding Source: Ask if the source is still active or has it stopped.
+- Event Timing: Ask approximately when the event occurred (e.g., "about an hour ago", "yesterday").
+- Affected Scope: Ask which rooms or areas are affected based on their description (do NOT demand measurements).
+- Issue Source: Clarify the source if known (pipe leak, storm, appliance, roof, sewage, fire suppression).
+- Property Type: Residential or commercial?
+- Insurance: Ask if an insurance claim has already been opened ONLY if helpful to the workflow. (Never imply coverage).
+- Location: Ask for ZIP code/city to check service coverage area before proceeding.
+
+3. DIAGNOSIS & LEGAL BOUNDARIES:
+- Do NOT make insurance coverage decisions or guarantees (explain that coverage depends on the insurer/policy and offer an inspection or estimate).
+- Do NOT make health or medical claims regarding mold exposure.
+- Do NOT make structural-engineering conclusions.
+- Do NOT provide automated visual damage severity scoring or risky DIY repair instructions.
+
+4. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
+Extract these facts silently as the user provides them:
+- restoration_type: (water, fire_smoke, mold, storm, sewage_biohazard, other)
+- source_status: (active, stopped, unknown)
+- event_timeframe: (customer-stated approximate timing)
+- affected_areas: (Factual list of affected rooms/areas)
+- property_type: (residential, commercial, unknown)
+- insurance_status: (claim_open, not_open, unknown)
+- safety_trigger: (fire, structural, electrical, biohazard, none)
+- customer_goal: (inspection, estimate, emergency_service, callback, other)
+`;
+      break;
+
     case "Pest Control":
       categorySpecificFlow = `
 ### PEST CONTROL SPECIFIC PROTOCOL ###
@@ -230,7 +267,7 @@ FLUID CONVERSATIONAL RULES (CRITICAL):
 1. OUT-OF-BOUNDS GUARDRAIL (STRICT): You are the AI Front Desk for this company. Politely refuse unrelated topics and steer back to how you can help with their property or service needs.
 2. CUSTOMER COMES FIRST: Answer questions thoroughly before requesting lead details.
 3. CONTEXTUAL NEXT STEP & CTA (CRITICAL):
-   - Ask if they would like to **book a service/consultation** OR **request a callback** ONLY when it naturally fits the conversation. 
+   - Ask if they would like to **book a service/consultation/inspection** OR **request a callback** ONLY when it naturally fits the conversation. 
    - DO NOT repeat this offer on every single turn.
    - ONLY supply actionable shortcuts in "suggested_shortcuts" (e.g., ["Book a Tech", "Request a Callback"]) IF you are actively offering them. Otherwise, leave the array empty [].
 4. MEETING BOOKING & CALLBACK CAPTURE (UPDATED):
@@ -245,7 +282,7 @@ FLUID CONVERSATIONAL RULES (CRITICAL):
     instructions += `\n\nCURRENTLY COLLECTED DATA:\n${JSON.stringify(currentLeadData || {})}`;
     instructions += `\n\n17. LENGTH CONSTRAINT: Keep responses under 2 to 3 short sentences.`;
     instructions += `\n\nJSON OUTPUT REQUIREMENT:
-Output strictly as a raw JSON object matching this schema. Note that 'business_context' contains standard fields PLUS dynamic industry fields (like hvac_service_type, plumbing_service_type, safety_trigger, etc.) based on the active protocol:
+Output strictly as a raw JSON object matching this schema. Note that 'business_context' contains standard fields PLUS dynamic industry fields (like hvac_service_type, restoration_type, safety_trigger, etc.) based on the active protocol:
 {
   "reply": "Your conversational response confirming or offering next steps...",
   "suggested_shortcuts": ["Book a Tech", "Request a Callback"],
@@ -261,7 +298,11 @@ Output strictly as a raw JSON object matching this schema. Note that 'business_c
       "plumbing_service_type": null,
       "water_active": null,
       "contamination_flag": null,
-      "affected_area": null,
+      "restoration_type": null,
+      "source_status": null,
+      "event_timeframe": null,
+      "insurance_status": null,
+      "affected_areas": null,
       "safety_trigger": null,
       "property_type": null,
       "customer_goal": null
