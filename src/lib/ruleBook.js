@@ -281,9 +281,36 @@ Extract these facts silently as the user provides them:
     case "Pest Control":
       categorySpecificFlow = `
 ### PEST CONTROL SPECIFIC PROTOCOL ###
-- Identify the type of pest (rodents, insects, termites, etc.).
-- Ask if the issue is indoors, outdoors, or both.
-- Reassure them that technicians use pet-safe and child-safe treatments.
+
+1. SAFETY FIRST (CRITICAL & IMMEDIATE):
+- MEDICAL EMERGENCY (Emergency): If the user mentions a severe allergic reaction or a medical emergency from a sting or bite, direct them to emergency medical services immediately. Pest booking becomes secondary. Set urgency_level to "Emergency".
+- STINGING INSECTS / DANGEROUS WILDLIFE (Urgent): For aggressive stinging-insect nests in occupied areas or dangerous wildlife, advise the user to keep a safe distance and prioritize urgent professional handling. Do NOT provide DIY removal steps.
+
+2. CONDITIONAL DISCOVERY (DO NOT ASK AS A RIGID SCRIPT):
+Only ask these if the information is missing and necessary for the next step:
+- Pest Identification: What has the customer seen or noticed? Accept "not sure" and route to an inspection if unknown.
+- Location: Where in/on the property is the activity occurring (e.g., kitchen, attic, bedroom, exterior)?
+- Severity/Frequency: How often or how much activity is being seen? (Keep it short, avoid a long diagnostic interview).
+- Timeframe: About how long has the issue been noticed?
+- Property Type: Residential or commercial?
+- Pets/Children: Ask about the presence of pets or children ONLY if it naturally comes up or is needed for treatment preparation.
+- Location (Address): Ask for ZIP code/city to check service coverage area before proceeding.
+
+3. DIAGNOSIS & LEGAL BOUNDARIES:
+- Do NOT guarantee complete eradication (use approved service/inspection language).
+- Do NOT prescribe or recommend specific hazardous chemicals or dosing instructions.
+- Do NOT provide wildlife handling instructions beyond maintaining a basic safety distance.
+- Do NOT provide medical diagnoses for bites or stings.
+
+4. DATA EXTRACTION EXPECTATIONS (Map to 'business_context' JSON):
+Extract these facts silently as the user provides them:
+- pest_type: (ants, roaches, rodents, termites, bed_bugs, wasps, mosquitoes, fleas, wildlife, unknown, etc.)
+- activity_location: (Customer-described area)
+- severity_description: (Customer-stated frequency/amount)
+- timeframe: (How long the issue has been noticed)
+- property_type: (residential, commercial, unknown)
+- safety_trigger: (medical_emergency, aggressive_stinging, dangerous_wildlife, none)
+- customer_goal: (inspection, treatment, quote, callback, recurring_service, other)
 `;
       break;
   }
@@ -319,7 +346,7 @@ FLUID CONVERSATIONAL RULES (CRITICAL):
     instructions += `\n\nCURRENTLY COLLECTED DATA:\n${JSON.stringify(currentLeadData || {})}`;
     instructions += `\n\n17. LENGTH CONSTRAINT: Keep responses under 2 to 3 short sentences.`;
     instructions += `\n\nJSON OUTPUT REQUIREMENT:
-Output strictly as a raw JSON object matching this schema. Note that 'business_context' contains standard fields PLUS dynamic industry fields (like hvac_service_type, roofing_service_type, safety_trigger, etc.) based on the active protocol:
+Output strictly as a raw JSON object matching this schema. Note that 'business_context' contains standard fields PLUS dynamic industry fields (like hvac_service_type, pest_type, safety_trigger, etc.) based on the active protocol:
 {
   "reply": "Your conversational response confirming or offering next steps...",
   "suggested_shortcuts": ["Book a Tech", "Request a Callback"],
@@ -346,7 +373,11 @@ Output strictly as a raw JSON object matching this schema. Note that 'business_c
       "roofing_service_type": null,
       "active_water_entry": null,
       "storm_date": null,
-      "roof_type": null
+      "roof_type": null,
+      "pest_type": null,
+      "activity_location": null,
+      "severity_description": null,
+      "timeframe": null
     },
     "booking_request": {
       "request_type": "consultation | callback | none",
