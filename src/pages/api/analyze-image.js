@@ -6,6 +6,16 @@ import { withApiLogger } from "../../lib/apiMiddleware";
 import { createAiLogger } from "../../lib/loggerPresets";
 import { getVisionSystemPrompt, VISION_DEFAULT_MODEL, VISION_POLICY_VERSION } from "../../lib/visionRuleBook";
 
+// 🔥 INFRASTRUCTURE SECURITY: Enforce a strict body size limit BEFORE Next.js attempts to parse it into RAM.
+// This prevents immediate Out-of-Memory (OOM) crashes if a malicious client sends a massive Base64 payload.
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '5mb', 
+    },
+  },
+};
+
 const aiLogger = createAiLogger("VisionDiagnosticAPI");
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
