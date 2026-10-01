@@ -10,6 +10,11 @@ import { generateCorrelationId } from "../../../lib/tracer";
 
 const baseLogger = createWebsiteLogger("SuperAdminLogin");
 
+// Helper function to generate a random 6-character CAPTCHA
+const generateCaptcha = () => {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+};
+
 const THEME_HUES = [
   { id: "default", name: "Default", color: "#8a2be2" },
   { id: "red", name: "Red", color: "#ef4444" },
@@ -62,6 +67,12 @@ export default function SuperAdminLoginScreen({
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // --- CAPTCHA & BRUTE FORCE STATE ---
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [showCaptcha, setShowCaptcha] = useState(false);
+  const [captchaValue, setCaptchaValue] = useState("");
+  const [userCaptchaInput, setUserCaptchaInput] = useState("");
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", "light");
@@ -132,15 +143,28 @@ export default function SuperAdminLoginScreen({
 
         if (matchedAdmin) {
           localStorage.setItem("currentSuperAdmin", matchedAdmin.name);
+          setFailedAttempts(0); // Reset on success
+
           txLogger.info("auth", "superadmin_login_success", {
             context: { user_id: username },
           });
           onLoginSuccess();
         } else {
+          // --- BRUTE FORCE CHECK ---
+          const newAttempts = failedAttempts + 1;
+          setFailedAttempts(newAttempts);
+
           txLogger.warn("auth", "superadmin_login_invalid", {
-            context: { user_id: username },
+            context: { user_id: username, attempts: newAttempts },
           });
-          setError("Invalid super admin credentials.");
+
+          if (newAttempts >= 3) {
+            setCaptchaValue(generateCaptcha());
+            setShowCaptcha(true);
+            setError("Too many failed attempts. Please solve the CAPTCHA to continue.");
+          } else {
+            setError(`Invalid super admin credentials. (${3 - newAttempts} attempts left)`);
+          }
         }
       } else {
         txLogger.error("auth", "superadmin_db_unavailable", {
@@ -159,15 +183,29 @@ export default function SuperAdminLoginScreen({
     }
   };
 
+  const handleCaptchaSubmit = (e) => {
+    e.preventDefault();
+    if (userCaptchaInput.toUpperCase() === captchaValue) {
+      // Captcha passed -> reset everything and show login form
+      setShowCaptcha(false);
+      setFailedAttempts(0);
+      setUserCaptchaInput("");
+      setError("");
+      setPassword(""); // Clear password for security
+    } else {
+      setError("Incorrect CAPTCHA. Please try again.");
+      setCaptchaValue(generateCaptcha()); // Regenerate on failure
+      setUserCaptchaInput("");
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--background)] p-4 font-sans text-[var(--foreground)] relative overflow-hidden transition-colors duration-300">
-      {/* Ambient Background Glow */}
       <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
         <div className="w-[50vw] h-[50vw] bg-[var(--primary)] opacity-10 blur-[120px] rounded-full mix-blend-screen transition-colors duration-300"></div>
       </div>
 
       <div className="w-full max-w-md bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl p-8 sm:p-10 shadow-2xl relative z-10 transition-colors duration-300">
-        {/* Logo and Header */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white shadow-[0_0_20px_var(--lead-glow)] mb-4 transition-all duration-300">
             <svg
@@ -187,80 +225,108 @@ export default function SuperAdminLoginScreen({
             Super Admin Portal
           </h1>
           <p className="text-[var(--foreground-muted)] text-sm mt-1 font-medium">
-            Restricted access. Sign in to continue.
+            {showCaptcha ? "Security Verification Required" : "Restricted access. Sign in to continue."}
           </p>
         </div>
 
-        {/* Login Form */}
-        <form onSubmit={handleLogin} className="space-y-5">
-          <div>
-            <label
-              htmlFor="username"
-              className="block text-xs font-bold text-[var(--foreground-muted)] uppercase tracking-wider mb-2"
-            >
-              Username
-            </label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full bg-[var(--background)] border border-[var(--border-color)] text-[var(--foreground)] px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-[var(--primary)] transition-all font-medium"
-              placeholder="Enter admin username"
-              required
-            />
+        {error && (
+          <div className="mb-5 bg-[var(--logo-politico-red, #ef4444)]/10 border border-[var(--logo-politico-red, #ef4444)]/20 text-[var(--logo-politico-red, #ef4444)] text-xs font-bold px-4 py-3 rounded-xl text-center">
+            {error}
           </div>
+        )}
 
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-xs font-bold text-[var(--foreground-muted)] uppercase tracking-wider mb-2"
-            >
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[var(--background)] border border-[var(--border-color)] text-[var(--foreground)] px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-[var(--primary)] transition-all font-medium"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
-          {/* Error Message Display using strict CSS vars for red */}
-          {error && (
-            <div className="bg-[var(--logo-politico-red)]/10 border border-[var(--logo-politico-red)]/20 text-[var(--logo-politico-red)] text-xs font-bold px-4 py-3 rounded-xl text-center">
-              {error}
+        {showCaptcha ? (
+          // --- CAPTCHA FORM ---
+          <form onSubmit={handleCaptchaSubmit} className="space-y-5 animate-fade-in">
+            <div className="flex flex-col items-center bg-[var(--background)] border border-[var(--border-color)] p-6 rounded-xl">
+              <span className="text-xs text-[var(--foreground-muted)] uppercase tracking-widest font-bold mb-2">Type this code</span>
+              <div className="text-3xl font-black tracking-[0.3em] text-[var(--primary)] select-none bg-[var(--card-bg)] px-6 py-3 rounded-lg border border-[var(--primary)]/20 line-through decoration-[var(--foreground-muted)] decoration-2">
+                {captchaValue}
+              </div>
             </div>
-          )}
+            
+            <div>
+              <input
+                type="text"
+                value={userCaptchaInput}
+                onChange={(e) => setUserCaptchaInput(e.target.value.toUpperCase())}
+                className="w-full text-center tracking-[0.2em] font-bold bg-[var(--background)] border border-[var(--border-color)] text-[var(--foreground)] px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-[var(--primary)] transition-all"
+                placeholder="ENTER CAPTCHA"
+                required
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-[var(--primary)] text-white font-bold py-3.5 rounded-xl shadow-[0_4px_15px_var(--lead-glow)] hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {isLoading ? (
-              <>
-                <svg
-                  className="w-5 h-5 animate-spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-                Authenticating...
-              </>
-            ) : (
-              "Secure Admin Login"
-            )}
-          </button>
-        </form>
+            <button
+              type="submit"
+              className="w-full bg-[var(--primary)] text-white font-bold py-3.5 rounded-xl shadow-[0_4px_15px_var(--lead-glow)] hover:opacity-90 active:scale-[0.98] transition-all"
+            >
+              Verify & Return to Login
+            </button>
+          </form>
+        ) : (
+          // --- STANDARD LOGIN FORM ---
+          <form onSubmit={handleLogin} className="space-y-5 animate-fade-in">
+            <div>
+              <label
+                htmlFor="username"
+                className="block text-xs font-bold text-[var(--foreground-muted)] uppercase tracking-wider mb-2"
+              >
+                Username
+              </label>
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-[var(--background)] border border-[var(--border-color)] text-[var(--foreground)] px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-[var(--primary)] transition-all font-medium"
+                placeholder="Enter admin username"
+                required
+              />
+            </div>
 
-        {/* Link back to standard User Login */}
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-xs font-bold text-[var(--foreground-muted)] uppercase tracking-wider mb-2"
+              >
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-[var(--background)] border border-[var(--border-color)] text-[var(--foreground)] px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/50 focus:border-[var(--primary)] transition-all font-medium"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-[var(--primary)] text-white font-bold py-3.5 rounded-xl shadow-[0_4px_15px_var(--lead-glow)] hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <>
+                  <svg
+                    className="w-5 h-5 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                  Authenticating...
+                </>
+              ) : (
+                "Secure Admin Login"
+              )}
+            </button>
+          </form>
+        )}
+
         <div className="mt-8 pt-6 border-t border-[var(--border-color)] text-center">
           <p className="text-xs text-[var(--foreground-muted)] font-medium">
             Not a super admin?{" "}
