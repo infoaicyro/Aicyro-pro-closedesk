@@ -144,7 +144,24 @@ export default function CookieConsentBanner() {
       // and their active time is synced.
       if (isDashboard) {
         handleDecision("accepted", true);
-        return; 
+        
+        // 🔄 Realtime Admin Heartbeat: Continuously ping Firebase every 30 seconds
+        // so the Admin's own card permanently says "Just now" while they are watching the dashboard!
+        const adminHeartbeat = setInterval(async () => {
+          const anonId = getOrCreateAnonId();
+          if (anonId && db) {
+            try {
+              const { ref, update } = await import("firebase/database");
+              await update(ref(db, `user_cookies/${anonId}`), {
+                updatedAt: new Date().toISOString()
+              });
+            } catch (e) {
+              // ignore network errors
+            }
+          }
+        }, 30000);
+
+        return () => clearInterval(adminHeartbeat); 
       }
 
       // If they already accepted AND the database record is safe, do nothing
