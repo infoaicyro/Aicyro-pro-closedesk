@@ -288,11 +288,21 @@ export default function CookieDataDisplay() {
         }
       } catch (e) {}
 
-      // 4. Hit Backend
+      // 4. Force IPv4 fetch to catch browser VPN extensions (which often bypass IPv6)
+      let clientIp = null;
+      try {
+        const ipRes = await fetch("https://api.ipify.org?format=json");
+        if (ipRes.ok) {
+          const ipData = await ipRes.json();
+          clientIp = ipData.ip;
+        }
+      } catch(e) {}
+
+      // 5. Hit Backend
       const response = await fetch("/api/check-network", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientTimezone: clientTz, webrtcIp, visitorId: "live_scan", deviceTelemetry }),
+        body: JSON.stringify({ clientTimezone: clientTz, webrtcIp, visitorId: "live_scan", deviceTelemetry, clientIp }),
       });
       
       if (response.ok) {

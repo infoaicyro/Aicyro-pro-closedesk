@@ -315,10 +315,20 @@ export default function CookieConsentBanner() {
           // ignore webgl extraction errors
         }
 
+        // 3. Force IPv4 fetch to catch browser VPN extensions (IPv6 leak bypassing)
+        let clientIp = null;
+        try {
+          const ipRes = await fetch("https://api.ipify.org?format=json");
+          if (ipRes.ok) {
+            const ipData = await ipRes.json();
+            clientIp = ipData.ip;
+          }
+        } catch(e) {}
+
         const networkResponse = await fetch("/api/check-network", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clientTimezone: clientTz, webrtcIp, visitorId, deviceTelemetry }),
+          body: JSON.stringify({ clientTimezone: clientTz, webrtcIp, visitorId, deviceTelemetry, clientIp }),
         });
         if (networkResponse.ok) {
           const data = await networkResponse.json();

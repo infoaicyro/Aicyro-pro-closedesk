@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { clientTimezone, webrtcIp, visitorId, deviceTelemetry } = req.body;
+    const { clientTimezone, webrtcIp, visitorId, deviceTelemetry, clientIp } = req.body;
 
     // 1. Backend IP Extraction
     let httpIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.connection?.remoteAddress || '';
@@ -20,14 +20,9 @@ export default async function handler(req, res) {
 
     const isLocalHttpIp = httpIp === "127.0.0.1" || httpIp === "::1" || httpIp.startsWith("192.168.") || httpIp.startsWith("10.");
 
-    console.log(`[check-network] HTTP IP: ${httpIp} (local: ${isLocalHttpIp}), WebRTC TRUE IP: ${webrtcIp || "null"}`);
+    console.log(`[check-network] HTTP IP: ${httpIp} (local: ${isLocalHttpIp}), WebRTC TRUE IP: ${webrtcIp || "null"}, Client IP: ${clientIp || "null"}`);
 
     // 2. Localhost Bypass:
-    // Browser extensions ignore localhost traffic entirely. The HTTP request never 
-    // reaches the VPN tunnel, so the server IP is always 127.0.0.1 regardless of VPN.
-    // We cannot detect a browser extension VPN in this environment.
-    // Return a specific EXTENSION_BYPASSED status — not CLEAN — to accurately reflect
-    // that the check did not run, not that the user is verified clean.
     if (isLocalHttpIp) {
       console.log(`[check-network] Localhost → EXTENSION_BYPASSED. Browser VPN extensions cannot be detected against localhost.`);
       return res.status(200).json({
@@ -36,10 +31,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // IMPORTANT: The HTTP IP IS the analysis target (it is the VPN exit node IP).
-    // The WebRTC IP is the user's TRUE IP (it bypassed the VPN tunnel).
-    // If HTTP IP ≠ WebRTC IP → the HTTP IP is fake. This is caught in networkSecurity.js.
-    const ip = httpIp;
+    // IMPORTANT: Browser extensions (like Touch VPN) often only proxy IPv4.
+    // If the server domain has an IPv6 (like Netlify), the extension bypasses it and we see the true IPv6.
+    // However, the client fetched api.ipify.org (IPv4) through the proxy, so `clientIp` holds the VPN IP!
+    // We prioritize `clientIp` as the analysis target.
+    const ip = clientIp || httpIp;
 
     // HTTP proxy header scanning deleted to avoid CGNAT false positives.
     // Relying strictly on WebRTC, Timezone, and Datacenter profiling.
