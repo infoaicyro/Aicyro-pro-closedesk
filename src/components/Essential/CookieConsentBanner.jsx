@@ -125,10 +125,9 @@ export default function CookieConsentBanner() {
       const anonId = getOrCreateAnonId();
       if (anonId && db) {
         const userCookieRef = ref(db, `user_cookies/${anonId}`);
-        get(userCookieRef).then((snapshot) => {
           if (snapshot.exists() && snapshot.val().consentStatus) {
             update(userCookieRef, { updatedAt: new Date().toISOString() }).catch(() => {});
-          } else {
+          } else if (!isDashboard) {
             // The user has the browser cookie but their database record is missing or corrupted
             // Show the banner again to regenerate their full data payload.
             setShowBanner(true);
@@ -138,6 +137,9 @@ export default function CookieConsentBanner() {
       }
       return; // Do not show the banner by default
     }
+
+    // 🛑 Do not ask for NEW cookies on the /lg page
+    if (isDashboard) return;
 
     // Always show the banner when a NEW user lands on the page
     setShowBanner(true);
