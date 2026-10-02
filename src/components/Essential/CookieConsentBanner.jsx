@@ -151,12 +151,12 @@ export default function CookieConsentBanner() {
     };
   }, [router.pathname]);
 
-  const closeBanner = () => {
+  function closeBanner() {
     document.body.style.overflow = "auto";
     setShowBanner(false);
   };
 
-  const handleDecision = (status, isSilentAdmin = false) => {
+  function handleDecision(status, isSilentAdmin = false) {
     // Instantly close the banner so the user is not blocked
     if (!isSilentAdmin) {
       closeBanner();
