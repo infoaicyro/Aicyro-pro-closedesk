@@ -115,10 +115,14 @@ export async function getDetailedVpnStatus(
     'linode', 'choopa', 'cdn77', 'leaseweb', 'microsoft', 'azure', 'google cloud',
     'hosting', 'datacenter', 'server', 'colocation', 'vps'
   ];
-  if (ipOrg !== "Unknown" && knownDatacenters.some(dc => ipOrg.toLowerCase().includes(dc))) {
-    result.isVpn = true;
-    result.vpnType = "Commercial Datacenter / VPN";
-    result.isSuspicious = true;
+  
+  const isDatacenter = ipOrg !== "Unknown" && knownDatacenters.some(dc => ipOrg.toLowerCase().includes(dc));
+  
+  if (isDatacenter) {
+    result.isVpn = false;
+    result.isTunnel = true;
+    result.vpnType = "Commercial Datacenter Tunnel";
+    result.isSuspicious = true; // Still suspicious, but labeled correctly as a tunnel
   }
 
   // 3. Hardware Emulation Profiling (WebGL Telemetry)
@@ -169,22 +173,32 @@ export async function getDetailedVpnStatus(
         if (data[ip].provider && result.asnOrg === "Unknown") {
           result.asnOrg = data[ip].provider;
         }
+        
+        // If ProxyCheck flags it as a Proxy/VPN
         if (data[ip].proxy === "yes") {
-          result.isVpn = true;
-          result.isTunnel = false;
-          result.vpnType = data[ip].type || "VPN";
-          result.isSuspicious = true;
+          const isKnownDc = knownDatacenters.some(dc => (data[ip].provider || result.asnOrg).toLowerCase().includes(dc));
+          
+          if (isKnownDc) {
+            // It's a Datacenter (like AWS). Classify as Tunnel, not VPN.
+            result.isVpn = false;
+            result.isTunnel = true;
+            result.vpnType = "Datacenter Tunnel";
+            result.isSuspicious = true;
+          } else {
+            result.isVpn = true;
+            result.isTunnel = false;
+            result.vpnType = data[ip].type || "VPN";
+            result.isSuspicious = true;
+          }
         } else {
           // ProxyCheck verifies this is NOT a known public VPN/Proxy.
-          // If we flagged it earlier (e.g., via WebRTC leak or Datacenter IP), 
-          // we downgrade it to a Private Tunnel (like a corporate office tunnel).
           if (result.isVpn) {
             result.isVpn = false;
             result.isTunnel = true;
             result.vpnType = result.vpnType === "WebRTC UDP Leak Detected" 
               ? "Private Corporate Tunnel" 
               : "Private Datacenter Tunnel";
-            result.isSuspicious = false; // Corporate tunnels are generally safe
+            result.isSuspicious = false;
           }
         }
       } else if (data.status === "warning" || data.status === "error") {
