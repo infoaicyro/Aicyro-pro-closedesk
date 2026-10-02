@@ -665,23 +665,29 @@ export default function CookieDataDisplay() {
                 <div className={`p-4 rounded-xl border flex items-center justify-between ${
                   scanResult.network?.isVpn 
                     ? "bg-red-500/10 border-red-500/20" 
-                    : scanResult.network?.isSuspicious === null 
-                      ? "bg-gray-500/10 border-gray-500/20"
-                      : "bg-emerald-500/10 border-emerald-500/20"
+                    : scanResult.network?.isTunnel
+                      ? "bg-amber-500/10 border-amber-500/20"
+                      : scanResult.network?.isSuspicious === null 
+                        ? "bg-gray-500/10 border-gray-500/20"
+                        : "bg-emerald-500/10 border-emerald-500/20"
                 }`}>
                   <span className="font-bold text-sm tracking-wide">FINAL VERDICT:</span>
                   <span className={`font-black text-sm uppercase px-3 py-1 rounded-full ${
                     scanResult.network?.isVpn 
                       ? "bg-red-500 text-white" 
-                      : scanResult.network?.isSuspicious === null 
-                        ? "bg-gray-500 text-white"
-                        : "bg-emerald-500 text-white"
+                      : scanResult.network?.isTunnel
+                        ? "bg-amber-500 text-white"
+                        : scanResult.network?.isSuspicious === null 
+                          ? "bg-gray-500 text-white"
+                          : "bg-emerald-500 text-white"
                   }`}>
                     {scanResult.network?.isVpn 
                       ? `VPN DETECTED (${scanResult.network?.vpnType})` 
-                      : scanResult.network?.isSuspicious === null 
-                        ? "UNVERIFIED"
-                        : "CLEAN NETWORK"}
+                      : scanResult.network?.isTunnel
+                        ? `TUNNEL DETECTED (${scanResult.network?.vpnType})`
+                        : scanResult.network?.isSuspicious === null 
+                          ? "UNVERIFIED"
+                          : "CLEAN NETWORK"}
                   </span>
                 </div>
               </div>

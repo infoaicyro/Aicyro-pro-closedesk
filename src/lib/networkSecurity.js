@@ -171,8 +171,21 @@ export async function getDetailedVpnStatus(
         }
         if (data[ip].proxy === "yes") {
           result.isVpn = true;
+          result.isTunnel = false;
           result.vpnType = data[ip].type || "VPN";
           result.isSuspicious = true;
+        } else {
+          // ProxyCheck verifies this is NOT a known public VPN/Proxy.
+          // If we flagged it earlier (e.g., via WebRTC leak or Datacenter IP), 
+          // we downgrade it to a Private Tunnel (like a corporate office tunnel).
+          if (result.isVpn) {
+            result.isVpn = false;
+            result.isTunnel = true;
+            result.vpnType = result.vpnType === "WebRTC UDP Leak Detected" 
+              ? "Private Corporate Tunnel" 
+              : "Private Datacenter Tunnel";
+            result.isSuspicious = false; // Corporate tunnels are generally safe
+          }
         }
       } else if (data.status === "warning" || data.status === "error") {
         result.apiFailed = true;
