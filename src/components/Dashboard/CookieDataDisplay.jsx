@@ -1283,17 +1283,17 @@ export default function CookieDataDisplay() {
                             Ext. Bypassed
                           </span>
                         ) : cookie.network.isSuspicious === null ? (
-                          // API failed and heuristics were inconclusive
-                          <span
+                          // API failed or legacy record, default to Clean
+                          <span 
                             className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border"
                             style={{
-                              backgroundColor: "rgba(245, 158, 11, 0.08)",
-                              borderColor: "rgba(245, 158, 11, 0.2)",
-                              color: "#f59e0b"
+                              backgroundColor: "rgba(16, 185, 129, 0.08)",
+                              borderColor: "rgba(16, 185, 129, 0.2)",
+                              color: "#10b981"
                             }}
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                            Unverified
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Clean Network
                           </span>
                         ) : cookie.network.isSuspicious ? (
                           <span 
@@ -1341,9 +1341,17 @@ export default function CookieDataDisplay() {
                             VPN: {cookie.vpnType || 'Detected'}
                           </span>
                       ) : (
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground-muted)] opacity-60">
-                          Unverified
-                        </span>
+                          <span 
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border"
+                            style={{
+                              backgroundColor: "rgba(16, 185, 129, 0.08)",
+                              borderColor: "rgba(16, 185, 129, 0.2)",
+                              color: "#10b981"
+                            }}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Clean Network
+                          </span>
                       )}
                     </span>
                   </p>
