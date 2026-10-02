@@ -194,11 +194,9 @@ export async function getDetailedVpnStatus(
     }
   }
 
-  // If the API failed to verify, and we didn't catch them with heuristics,
-  // we cannot confidently say it's CLEAN. Mark as null (UNVERIFIED).
-  if (result.apiFailed && !result.isSuspicious) {
-    result.isSuspicious = null;
-  }
+  // We previously failed-closed to UNVERIFIED here on API timeout, but this caused
+  // false positives on the dashboard for legitimate users when the API rate limits us.
+  // We now fail-open: if heuristics didn't catch them, and API fails, they are CLEAN.
 
   // sessionStorage setItem removed (DOM API missing in Node.js).
 
