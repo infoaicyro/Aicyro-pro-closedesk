@@ -1,5 +1,5 @@
 // src/pages/api/analytics.js
-import { ref, runTransaction, push, update, set } from "firebase/database";
+import { ref, runTransaction, push, update, set, get } from "firebase/database";
 import { withApiLogger } from "../../lib/apiMiddleware";
 import { db } from "../../lib/firebase";
 
@@ -88,6 +88,13 @@ async function handler(req, res, apiLogger) {
       lastActiveAt: timestamp,
       lastVisitedPage: pagePath,
     });
+
+    // Sync the active time to the Dashboard (user_cookies) without creating ghost records
+    const userCookieRef = ref(db, `user_cookies/${anonId}`);
+    const cookieSnap = await get(userCookieRef);
+    if (cookieSnap.exists() && cookieSnap.val().consentStatus) {
+      await update(userCookieRef, { updatedAt: timestamp });
+    }
 
     return res.status(200).json({ success: true });
   } catch (error) {

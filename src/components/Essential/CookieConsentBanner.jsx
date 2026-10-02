@@ -116,26 +116,17 @@ export default function CookieConsentBanner() {
   const router = useRouter();
 
   useEffect(() => {
+    const isDashboard =
+      typeof window !== "undefined" &&
+      (window.location.pathname === "/lg" ||
+        window.location.pathname.startsWith("/lg/"));
+
     const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
     
+    // If they already accepted, don't show the banner.
+    // Their active time is now handled dynamically by the activityTracker -> /api/analytics backend
     if (existingConsent) {
-      // 🔄 HEARTBEAT LOGIC: The user already accepted the banner in a previous session.
-      // Instead of forcing them to accept again, we silently update their last active time in Firebase.
-      // Note: We deliberately allow the heartbeat to fire on the dashboard (/lg) so admins see their own live time.
-      const anonId = getOrCreateAnonId();
-      if (anonId && db) {
-        const userCookieRef = ref(db, `user_cookies/${anonId}`);
-          if (snapshot.exists() && snapshot.val().consentStatus) {
-            update(userCookieRef, { updatedAt: new Date().toISOString() }).catch(() => {});
-          } else if (!isDashboard) {
-            // The user has the browser cookie but their database record is missing or corrupted
-            // Show the banner again to regenerate their full data payload.
-            setShowBanner(true);
-            document.body.style.overflow = "hidden";
-          }
-        }).catch(() => {});
-      }
-      return; // Do not show the banner by default
+      return; 
     }
 
     // 🛑 Do not ask for NEW cookies on the /lg page
