@@ -52,6 +52,7 @@ const CustomMapMarker = ({ cookie, zoom, now, isActive, onClick }) => {
     if (placeName) return;
 
     const fetchPlaceName = async () => {
+      if (cookie.location?.lat == null || cookie.location?.lng == null) return;
       try {
         const res = await fetch(
           `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${cookie.location.lat}&longitude=${cookie.location.lng}&localityLanguage=en`,
@@ -143,7 +144,7 @@ const LocationRenderer = ({ location }) => {
   const [placeName, setPlaceName] = useState("");
 
   useEffect(() => {
-    if (location?.status !== "allowed" || !location?.lat || !location?.lng)
+    if (location?.status !== "allowed" || location?.lat == null || location?.lng == null)
       return;
 
     const fetchPlaceName = async () => {
@@ -170,7 +171,7 @@ const LocationRenderer = ({ location }) => {
 
   if (location?.status === "rejected") return <span>Permission Denied</span>;
   if (location?.status === "unsupported") return <span>Unsupported</span>;
-  if (location?.status !== "allowed" || !location?.lat || !location?.lng)
+  if (location?.status !== "allowed" || location?.lat == null || location?.lng == null)
     return <span>Not Captured</span>;
 
   return (
@@ -244,6 +245,78 @@ export default function CookieDataDisplay() {
   const [position, setPosition] = useState({ coordinates: [0, 20], zoom: 1 });
   const [activeMapMarker, setActiveMapMarker] = useState(null);
 
+  // Live Scan State
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+
+  const handleLiveScan = async () => {
+    setIsScanning(true);
+    setScanResult(null);
+    try {
+      // 1. Client Timezone
+      const clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      
+      // 2. WebRTC Check
+      const webrtcIp = await new Promise((resolve) => {
+        const rtc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+        rtc.createDataChannel("");
+        let resolved = false;
+        const finish = (ip) => { if (!resolved) { resolved = true; rtc.close(); resolve(ip); } };
+        rtc.onicecandidate = (evt) => {
+          if (evt.candidate && evt.candidate.candidate) {
+            const match = evt.candidate.candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
+            if (match) finish(match[1]);
+          }
+        };
+        rtc.createOffer().then(o => rtc.setLocalDescription(o)).catch(() => finish(null));
+        setTimeout(() => finish(null), 1500);
+      });
+
+      // 3. Telemetry
+      let deviceTelemetry = null;
+      try {
+        const canvas = document.createElement("canvas");
+        const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        if (gl) {
+          const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+          if (debugInfo) {
+            deviceTelemetry = {
+              gpuVendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+              gpuRenderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+            };
+          }
+        }
+      } catch (e) {}
+
+      // 4. Force IPv4 fetch to catch browser VPN extensions (which often bypass IPv6)
+      let clientIp = null;
+      try {
+        const ipRes = await fetch("https://api.ipify.org?format=json");
+        if (ipRes.ok) {
+          const ipData = await ipRes.json();
+          clientIp = ipData.ip;
+        }
+      } catch(e) {}
+
+      // 5. Hit Backend
+      const response = await fetch("/api/check-network", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientTimezone: clientTz, webrtcIp, visitorId: "live_scan", deviceTelemetry, clientIp }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setScanResult(data);
+      } else {
+        setScanResult({ error: "API Failed to scan network." });
+      }
+    } catch (e) {
+      setScanResult({ error: e.message });
+    }
+    setIsScanning(false);
+  };
+
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
@@ -268,6 +341,14 @@ export default function CookieDataDisplay() {
               return;
             }
           }
+          
+          // 🛑 Ghost Record Cleanup: If a record is missing critical data (like from the old buggy heartbeat)
+          // instantly delete it from the database so it stops polluting the dashboard!
+          if (!item.consentStatus && !item.ipAddress) {
+            remove(ref(db, `user_cookies/${key}`)).catch(console.error);
+            return;
+          }
+
           validData.push({ id: key, ...item });
         });
 
@@ -474,7 +555,7 @@ export default function CookieDataDisplay() {
   const hasActiveFilters = Object.values(filters).some((val) => val !== "All");
   const mappedCookies = displayCookies.filter(
     (c) =>
-      c.location?.status === "allowed" && c.location?.lat && c.location?.lng,
+      c.location?.status === "allowed" && c.location?.lat != null && c.location?.lng != null,
   );
 
   if (loading) {
@@ -534,6 +615,15 @@ export default function CookieDataDisplay() {
                   : "View Active Sessions"}
               </button>
             )}
+
+            <button
+              onClick={handleLiveScan}
+              disabled={isScanning}
+              className="ml-3 px-3 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase border transition-all bg-[var(--primary)] border-[var(--primary)] text-white hover:bg-[var(--primary)]/90 shadow-sm flex items-center gap-2 disabled:opacity-50"
+            >
+              <svg className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              {isScanning ? "Scanning..." : "Scan My Connection"}
+            </button>
           </div>
           <p className="text-[var(--foreground-muted)] text-sm ml-6">
             {viewMode === "active"
@@ -542,6 +632,79 @@ export default function CookieDataDisplay() {
           </p>
         </div>
       </div>
+
+      {/* Live Scan Modal */}
+      {scanResult && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-6 max-w-lg w-full shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button onClick={() => setScanResult(null)} className="absolute top-4 right-4 text-[var(--foreground-muted)] hover:text-[var(--foreground)]">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-[var(--foreground)]">
+              <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+              Live Network Scan Results
+            </h3>
+            
+            {scanResult.error ? (
+              <div className="bg-red-500/10 text-red-500 p-4 rounded-xl border border-red-500/20 text-sm">
+                Error: {scanResult.error}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
+                    <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">IP Address</span>
+                    <span className="text-sm font-semibold text-[var(--foreground)] truncate block" title={scanResult.ipData?.ip || "Unknown"}>{scanResult.ipData?.ip || "Unknown"}</span>
+                  </div>
+                  <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
+                    <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">Location</span>
+                    <span className="text-sm font-semibold text-[var(--foreground)]">{scanResult.ipData?.city}, {scanResult.ipData?.country}</span>
+                  </div>
+                  <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
+                    <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">ISP / Datacenter</span>
+                    <span className="text-sm font-semibold text-[var(--foreground)] truncate block" title={scanResult.network?.asnOrg || "Unknown"}>{scanResult.network?.asnOrg || "Unknown"}</span>
+                  </div>
+                  <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
+                    <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">Timezone Mismatch</span>
+                    <span className={`text-sm font-semibold ${scanResult.network?.timezoneMismatch ? "text-amber-500" : "text-emerald-500"}`}>
+                      {scanResult.network?.timezoneMismatch ? "Yes (Suspicious)" : "No (Normal)"}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className={`p-4 rounded-xl border flex items-center justify-between ${
+                  scanResult.network?.isVpn 
+                    ? "bg-red-500/10 border-red-500/20" 
+                    : scanResult.network?.isTunnel
+                      ? "bg-amber-500/10 border-amber-500/20"
+                      : scanResult.network?.isSuspicious === null 
+                        ? "bg-gray-500/10 border-gray-500/20"
+                        : "bg-emerald-500/10 border-emerald-500/20"
+                }`}>
+                  <span className="font-bold text-sm tracking-wide">FINAL VERDICT:</span>
+                  <span className={`font-black text-sm uppercase px-3 py-1 rounded-full ${
+                    scanResult.network?.isVpn 
+                      ? "bg-red-500 text-white" 
+                      : scanResult.network?.isTunnel
+                        ? "bg-amber-500 text-white"
+                        : scanResult.network?.isSuspicious === null 
+                          ? "bg-gray-500 text-white"
+                          : "bg-emerald-500 text-white"
+                  }`}>
+                    {scanResult.network?.isVpn 
+                      ? `VPN DETECTED (${scanResult.network?.vpnType})` 
+                      : scanResult.network?.isTunnel
+                        ? `TUNNEL DETECTED (${scanResult.network?.vpnType})`
+                        : scanResult.network?.isSuspicious === null 
+                          ? "UNVERIFIED"
+                          : "CLEAN NETWORK"}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Floating Action Toolbar */}
       {selectedCookies.length > 0 && (
@@ -1109,6 +1272,7 @@ export default function CookieDataDisplay() {
                       )}
                     </span>
                   </p>
+
                 </div>
 
                 <div className="mt-5 pt-4 border-t border-[var(--border-color)] relative z-10">
