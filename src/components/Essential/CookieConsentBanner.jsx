@@ -1,5 +1,6 @@
 // src/components/Essential/CookieConsentBanner.jsx
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/router";
 import { ref, set, update, get } from "firebase/database";
 import { db } from "../../lib/firebase";
 import {
@@ -112,6 +113,7 @@ const getUserLocation = (txLogger = baseLogger) => {
 
 export default function CookieConsentBanner() {
   const [showBanner, setShowBanner] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     // 🛑 Do not ask for cookies on the /lg page
@@ -157,7 +159,7 @@ export default function CookieConsentBanner() {
     return () => {
       document.body.style.overflow = "auto";
     };
-  }, []);
+  }, [router.pathname]);
 
   const closeBanner = () => {
     document.body.style.overflow = "auto";
