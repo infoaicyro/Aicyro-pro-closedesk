@@ -123,6 +123,8 @@ export default function CookieConsentBanner() {
 
     const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
     
+    let adminHeartbeat;
+    
     // We need to verify if their database record still exists (in case they manually deleted it while testing)
     const verifyDatabaseRecord = async () => {
       let recordExists = true;
@@ -147,7 +149,7 @@ export default function CookieConsentBanner() {
         
         // 🔄 Realtime Admin Heartbeat: Continuously ping Firebase every 30 seconds
         // so the Admin's own card permanently says "Just now" while they are watching the dashboard!
-        const adminHeartbeat = setInterval(async () => {
+        adminHeartbeat = setInterval(async () => {
           const anonId = getOrCreateAnonId();
           if (anonId && db) {
             try {
@@ -161,7 +163,7 @@ export default function CookieConsentBanner() {
           }
         }, 30000);
 
-        return () => clearInterval(adminHeartbeat); 
+        return; 
       }
 
       // If they already accepted AND the database record is safe, do nothing
@@ -183,6 +185,7 @@ export default function CookieConsentBanner() {
     // Cleanup function
     return () => {
       document.body.style.overflow = "auto";
+      if (adminHeartbeat) clearInterval(adminHeartbeat);
     };
   }, [router.pathname]);
 
@@ -214,10 +217,14 @@ export default function CookieConsentBanner() {
       setStrictCookie(CONSENT_COOKIE_NAME, { status, timestamp: Date.now() });
 
       const deviceName = getReadableDeviceName();
-      const storedAppUser =
-        typeof window !== "undefined"
-          ? localStorage.getItem("aicyro_username")
-          : null;
+      let storedAppUser = null;
+      if (typeof window !== "undefined") {
+        try {
+          storedAppUser = localStorage.getItem("aicyro_username");
+        } catch (e) {
+          // ignore strict privacy blocking
+        }
+      }
       const username = isSilentAdmin 
         ? `Admin_${anonId ? anonId.substring(0, 8) : "Console"}`
         : (storedAppUser || `Visitor_${anonId ? anonId.substring(0, 8) : "Guest"}`);
