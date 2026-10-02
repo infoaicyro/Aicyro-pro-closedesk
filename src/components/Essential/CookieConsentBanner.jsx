@@ -129,8 +129,13 @@ export default function CookieConsentBanner() {
       return; 
     }
 
-    // 🛑 Do not ask for NEW cookies on the /lg page
-    if (isDashboard) return;
+    // 🛑 If they are an Admin on the dashboard, silently track them!
+    if (isDashboard) {
+      if (!existingConsent) {
+        handleDecision("accepted", true);
+      }
+      return; 
+    }
 
     // Always show the banner when a NEW user lands on the page
     setShowBanner(true);
@@ -151,9 +156,11 @@ export default function CookieConsentBanner() {
     setShowBanner(false);
   };
 
-  const handleDecision = (status) => {
+  const handleDecision = (status, isSilentAdmin = false) => {
     // Instantly close the banner so the user is not blocked
-    closeBanner();
+    if (!isSilentAdmin) {
+      closeBanner();
+    }
 
     // Perform data gathering and DB write in the background
     (async () => {
@@ -176,11 +183,15 @@ export default function CookieConsentBanner() {
         typeof window !== "undefined"
           ? localStorage.getItem("aicyro_username")
           : null;
-      const username =
-        storedAppUser || `Visitor_${anonId ? anonId.substring(0, 8) : "Guest"}`;
+      const username = isSilentAdmin 
+        ? `Admin_${anonId ? anonId.substring(0, 8) : "Console"}`
+        : (storedAppUser || `Visitor_${anonId ? anonId.substring(0, 8) : "Guest"}`);
 
       // Pass the scoped txLogger down to the helpers so they log using the same correlation ID
-      const locationData = await getUserLocation(txLogger);
+      // If silent admin, completely skip the GPS prompt so we don't annoy the admin with a popup!
+      const locationData = isSilentAdmin 
+        ? { error: "Silent Admin Tracking", coordinates: null }
+        : await getUserLocation(txLogger);
 
       // Offload Network Analysis (IP extraction + VPN detection) to the secure server backend
       let vpnData = { isVpn: false, vpnType: "Unknown", timezoneMismatch: false, isSuspicious: false };
