@@ -123,23 +123,41 @@ export default function CookieConsentBanner() {
 
     const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
     
-    // If they already accepted, don't show the banner.
-    // Their active time is now handled dynamically by the activityTracker -> /api/analytics backend
-    if (existingConsent) {
-      return; 
-    }
-
-    // 🛑 If they are an Admin on the dashboard, silently track them!
-    if (isDashboard) {
-      if (!existingConsent) {
-        handleDecision("accepted", true);
+    // We need to verify if their database record still exists (in case they manually deleted it while testing)
+    const verifyDatabaseRecord = async () => {
+      let recordExists = true;
+      if (existingConsent) {
+        const anonId = getOrCreateAnonId();
+        if (anonId && db) {
+          try {
+            const { ref, get } = await import("firebase/database");
+            const snapshot = await get(ref(db, `user_cookies/${anonId}`));
+            recordExists = snapshot.exists() && snapshot.val().consentStatus;
+          } catch (e) {
+            // ignore network errors, assume it exists to prevent spamming
+          }
+        }
       }
-      return; 
-    }
 
-    // Always show the banner when a NEW user lands on the page
-    setShowBanner(true);
-    document.body.style.overflow = "hidden";
+      // 🛑 If they are an Admin on the dashboard, silently track them!
+      if (isDashboard) {
+        if (!existingConsent || !recordExists) {
+          handleDecision("accepted", true);
+        }
+        return; 
+      }
+
+      // If they already accepted AND the database record is safe, do nothing
+      if (existingConsent && recordExists) {
+        return;
+      }
+
+      // Always show the banner when a NEW user lands on the page (or their DB record was wiped)
+      setShowBanner(true);
+      document.body.style.overflow = "hidden";
+    };
+
+    verifyDatabaseRecord();
 
     baseLogger.info("ui_render", "banner_displayed", {
       context: { message: "Cookie banner locked screen" },
