@@ -244,6 +244,68 @@ export default function CookieDataDisplay() {
   const [position, setPosition] = useState({ coordinates: [0, 20], zoom: 1 });
   const [activeMapMarker, setActiveMapMarker] = useState(null);
 
+  // Live Scan State
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanResult, setScanResult] = useState(null);
+
+  const handleLiveScan = async () => {
+    setIsScanning(true);
+    setScanResult(null);
+    try {
+      // 1. Client Timezone
+      const clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      
+      // 2. WebRTC Check
+      const webrtcIp = await new Promise((resolve) => {
+        const rtc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+        rtc.createDataChannel("");
+        let resolved = false;
+        const finish = (ip) => { if (!resolved) { resolved = true; rtc.close(); resolve(ip); } };
+        rtc.onicecandidate = (evt) => {
+          if (evt.candidate && evt.candidate.candidate) {
+            const match = evt.candidate.candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
+            if (match) finish(match[1]);
+          }
+        };
+        rtc.createOffer().then(o => rtc.setLocalDescription(o)).catch(() => finish(null));
+        setTimeout(() => finish(null), 1500);
+      });
+
+      // 3. Telemetry
+      let deviceTelemetry = null;
+      try {
+        const canvas = document.createElement("canvas");
+        const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        if (gl) {
+          const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+          if (debugInfo) {
+            deviceTelemetry = {
+              gpuVendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+              gpuRenderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+            };
+          }
+        }
+      } catch (e) {}
+
+      // 4. Hit Backend
+      const response = await fetch("/api/check-network", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientTimezone: clientTz, webrtcIp, visitorId: "live_scan", deviceTelemetry }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setScanResult(data);
+      } else {
+        setScanResult({ error: "API Failed to scan network." });
+      }
+    } catch (e) {
+      setScanResult({ error: e.message });
+    }
+    setIsScanning(false);
+  };
+
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 10000);
     return () => clearInterval(timer);
@@ -534,6 +596,15 @@ export default function CookieDataDisplay() {
                   : "View Active Sessions"}
               </button>
             )}
+
+            <button
+              onClick={handleLiveScan}
+              disabled={isScanning}
+              className="ml-3 px-3 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase border transition-all bg-[var(--primary)] border-[var(--primary)] text-white hover:bg-[var(--primary)]/90 shadow-sm flex items-center gap-2 disabled:opacity-50"
+            >
+              <svg className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              {isScanning ? "Scanning..." : "Scan My Connection"}
+            </button>
           </div>
           <p className="text-[var(--foreground-muted)] text-sm ml-6">
             {viewMode === "active"
@@ -542,6 +613,73 @@ export default function CookieDataDisplay() {
           </p>
         </div>
       </div>
+
+      {/* Live Scan Modal */}
+      {scanResult && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-6 max-w-lg w-full shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button onClick={() => setScanResult(null)} className="absolute top-4 right-4 text-[var(--foreground-muted)] hover:text-[var(--foreground)]">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-[var(--foreground)]">
+              <svg className="w-5 h-5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+              Live Network Scan Results
+            </h3>
+            
+            {scanResult.error ? (
+              <div className="bg-red-500/10 text-red-500 p-4 rounded-xl border border-red-500/20 text-sm">
+                Error: {scanResult.error}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
+                    <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">IP Address</span>
+                    <span className="text-sm font-semibold text-[var(--foreground)]">{scanResult.ipData?.ip || "Unknown"}</span>
+                  </div>
+                  <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
+                    <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">Location</span>
+                    <span className="text-sm font-semibold text-[var(--foreground)]">{scanResult.ipData?.city}, {scanResult.ipData?.country}</span>
+                  </div>
+                  <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
+                    <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">ISP / Datacenter</span>
+                    <span className="text-sm font-semibold text-[var(--foreground)] truncate block" title={scanResult.network?.asnOrg || "Unknown"}>{scanResult.network?.asnOrg || "Unknown"}</span>
+                  </div>
+                  <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
+                    <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">Timezone Mismatch</span>
+                    <span className={`text-sm font-semibold ${scanResult.network?.timezoneMismatch ? "text-amber-500" : "text-emerald-500"}`}>
+                      {scanResult.network?.timezoneMismatch ? "Yes (Suspicious)" : "No (Normal)"}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className={`p-4 rounded-xl border flex items-center justify-between ${
+                  scanResult.network?.isVpn 
+                    ? "bg-red-500/10 border-red-500/20" 
+                    : scanResult.network?.isSuspicious === null 
+                      ? "bg-gray-500/10 border-gray-500/20"
+                      : "bg-emerald-500/10 border-emerald-500/20"
+                }`}>
+                  <span className="font-bold text-sm tracking-wide">FINAL VERDICT:</span>
+                  <span className={`font-black text-sm uppercase px-3 py-1 rounded-full ${
+                    scanResult.network?.isVpn 
+                      ? "bg-red-500 text-white" 
+                      : scanResult.network?.isSuspicious === null 
+                        ? "bg-gray-500 text-white"
+                        : "bg-emerald-500 text-white"
+                  }`}>
+                    {scanResult.network?.isVpn 
+                      ? `VPN DETECTED (${scanResult.network?.vpnType})` 
+                      : scanResult.network?.isSuspicious === null 
+                        ? "UNVERIFIED"
+                        : "CLEAN NETWORK"}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Floating Action Toolbar */}
       {selectedCookies.length > 0 && (
@@ -1106,6 +1244,106 @@ export default function CookieDataDisplay() {
                         </a>
                       ) : (
                         cookie.ipLocation?.city || "Unknown"
+                      )}
+                    </span>
+                  </p>
+                  <p className="flex items-center gap-3">
+                    <span className="flex items-center justify-center w-7 h-7 shrink-0 rounded-lg bg-[var(--background)] border border-[var(--border-color)] text-[var(--primary)]">
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                        />
+                      </svg>
+                    </span>
+                    <strong className="text-[var(--foreground)] w-20 shrink-0">
+                      VPN Status
+                    </strong>
+                    <span className="flex-1 flex items-center">
+                      {cookie.network ? (
+                        cookie.network.bypassed ? (
+                          // Browser extension ignores localhost - detection was skipped
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border"
+                            style={{
+                              backgroundColor: "rgba(100, 116, 139, 0.08)",
+                              borderColor: "rgba(100, 116, 139, 0.3)",
+                              color: "#94a3b8"
+                            }}
+                            title="Browser extension VPN ignores localhost. Deploy to a public URL to detect."
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                            Ext. Bypassed
+                          </span>
+                        ) : cookie.network.isSuspicious === null ? (
+                          // API failed and heuristics were inconclusive
+                          <span
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border"
+                            style={{
+                              backgroundColor: "rgba(245, 158, 11, 0.08)",
+                              borderColor: "rgba(245, 158, 11, 0.2)",
+                              color: "#f59e0b"
+                            }}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                            Unverified
+                          </span>
+                        ) : cookie.network.isSuspicious ? (
+                          <span 
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border transition-all"
+                            style={{
+                              backgroundColor: "rgba(239, 68, 68, 0.08)",
+                              borderColor: "rgba(239, 68, 68, 0.2)",
+                              color: "#ef4444",
+                              boxShadow: "0 0 10px rgba(239, 68, 68, 0.15)"
+                            }}
+                            title={cookie.network.timezoneMismatch ? "Timezone Mismatch Detected" : "VPN Detected"}
+                          >
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                            </span>
+                            {cookie.network.isVpn ? `VPN: ${cookie.network.vpnType || 'Detected'}` : "Suspicious Locale"}
+                          </span>
+                        ) : (
+                          <span 
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border"
+                            style={{
+                              backgroundColor: "rgba(16, 185, 129, 0.08)",
+                              borderColor: "rgba(16, 185, 129, 0.2)",
+                              color: "#10b981"
+                            }}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            Clean Network
+                          </span>
+                        )
+                      ) : cookie.isVpn ? (
+                          <span 
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border transition-all"
+                            style={{
+                              backgroundColor: "rgba(239, 68, 68, 0.08)",
+                              borderColor: "rgba(239, 68, 68, 0.2)",
+                              color: "#ef4444"
+                            }}
+                          >
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                            </span>
+                            VPN: {cookie.vpnType || 'Detected'}
+                          </span>
+                      ) : (
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--foreground-muted)] opacity-60">
+                          Unverified
+                        </span>
                       )}
                     </span>
                   </p>
