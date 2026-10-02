@@ -85,6 +85,7 @@ export async function getDetailedVpnStatus(
     timezoneMismatch: checkTimezoneMismatch(ipTimezone, clientTimezone),
     isSuspicious: hasProxyHeaders, // Inherit if headers are flagged
     apiFailed: false, // Track if we actually finished the check
+    asnOrg: ipOrg, // Initial fallback from ipinfo.io
   };
 
   // 1. WebRTC Leak Detection (Correct Direction)
@@ -165,6 +166,9 @@ export async function getDetailedVpnStatus(
     } else {
       const data = await response.json();
       if (data.status === "ok" && data[ip]) {
+        if (data[ip].provider && result.asnOrg === "Unknown") {
+          result.asnOrg = data[ip].provider;
+        }
         if (data[ip].proxy === "yes") {
           result.isVpn = true;
           result.vpnType = data[ip].type || "VPN";
