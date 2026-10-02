@@ -139,11 +139,11 @@ export default function CookieConsentBanner() {
         }
       }
 
-      // 🛑 If they are an Admin on the dashboard, silently track them!
+      // 🛑 If they are an Admin on the dashboard, FORCE them into the Admin role
+      // This ensures if they previously got tracked as a normal visitor, they are instantly upgraded to an Admin
+      // and their active time is synced.
       if (isDashboard) {
-        if (!existingConsent || !recordExists) {
-          handleDecision("accepted", true);
-        }
+        handleDecision("accepted", true);
         return; 
       }
 
