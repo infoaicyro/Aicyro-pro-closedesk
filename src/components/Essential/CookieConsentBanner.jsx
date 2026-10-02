@@ -1,9 +1,10 @@
 // src/components/Essential/CookieConsentBanner.jsx
 import React, { useState, useEffect } from "react";
-import { ref, set } from "firebase/database";
+import { ref, set, update } from "firebase/database";
 import { db } from "../../lib/firebase";
 import {
   setStrictCookie,
+  getStrictCookie,
   getOrCreateAnonId,
   CONSENT_COOKIE_NAME,
 } from "../../lib/cookiePersonalization";
@@ -122,7 +123,20 @@ export default function CookieConsentBanner() {
       return;
     }
 
-    // Always show the banner when the user lands on the page
+    const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
+    
+    if (existingConsent) {
+      // 🔄 HEARTBEAT LOGIC: The user already accepted the banner in a previous session.
+      // Instead of forcing them to accept again, we silently update their last active time in Firebase.
+      const anonId = getOrCreateAnonId();
+      if (anonId && db) {
+        const userCookieRef = ref(db, `user_cookies/${anonId}`);
+        update(userCookieRef, { updatedAt: new Date().toISOString() }).catch(() => {});
+      }
+      return; // Do not show the banner
+    }
+
+    // Always show the banner when a NEW user lands on the page
     setShowBanner(true);
     document.body.style.overflow = "hidden";
 
