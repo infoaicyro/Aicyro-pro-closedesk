@@ -330,6 +330,14 @@ export default function CookieDataDisplay() {
               return;
             }
           }
+          
+          // 🛑 Ghost Record Cleanup: If a record is missing critical data (like from the old buggy heartbeat)
+          // instantly delete it from the database so it stops polluting the dashboard!
+          if (!item.consentStatus && !item.ipAddress) {
+            remove(ref(db, `user_cookies/${key}`)).catch(console.error);
+            return;
+          }
+
           validData.push({ id: key, ...item });
         });
 
