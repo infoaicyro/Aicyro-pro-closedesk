@@ -132,10 +132,10 @@ export default function CookieConsentBanner() {
       if (anonId && db) {
         const userCookieRef = ref(db, `user_cookies/${anonId}`);
         get(userCookieRef).then((snapshot) => {
-          if (snapshot.exists()) {
+          if (snapshot.exists() && snapshot.val().consentStatus) {
             update(userCookieRef, { updatedAt: new Date().toISOString() }).catch(() => {});
           } else {
-            // The user has the browser cookie but their database record was deleted!
+            // The user has the browser cookie but their database record is missing or corrupted
             // Show the banner again to regenerate their full data payload.
             setShowBanner(true);
             document.body.style.overflow = "hidden";
