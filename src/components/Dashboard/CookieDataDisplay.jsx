@@ -635,7 +635,7 @@ export default function CookieDataDisplay() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
                     <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">IP Address</span>
-                    <span className="text-sm font-semibold text-[var(--foreground)]">{scanResult.ipData?.ip || "Unknown"}</span>
+                    <span className="text-sm font-semibold text-[var(--foreground)] truncate block" title={scanResult.ipData?.ip || "Unknown"}>{scanResult.ipData?.ip || "Unknown"}</span>
                   </div>
                   <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
                     <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">Location</span>
