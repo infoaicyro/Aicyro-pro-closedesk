@@ -52,6 +52,7 @@ const CustomMapMarker = ({ cookie, zoom, now, isActive, onClick }) => {
     if (placeName) return;
 
     const fetchPlaceName = async () => {
+      if (cookie.location?.lat == null || cookie.location?.lng == null) return;
       try {
         const res = await fetch(
           `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${cookie.location.lat}&longitude=${cookie.location.lng}&localityLanguage=en`,
@@ -143,7 +144,7 @@ const LocationRenderer = ({ location }) => {
   const [placeName, setPlaceName] = useState("");
 
   useEffect(() => {
-    if (location?.status !== "allowed" || !location?.lat || !location?.lng)
+    if (location?.status !== "allowed" || location?.lat == null || location?.lng == null)
       return;
 
     const fetchPlaceName = async () => {
@@ -170,7 +171,7 @@ const LocationRenderer = ({ location }) => {
 
   if (location?.status === "rejected") return <span>Permission Denied</span>;
   if (location?.status === "unsupported") return <span>Unsupported</span>;
-  if (location?.status !== "allowed" || !location?.lat || !location?.lng)
+  if (location?.status !== "allowed" || location?.lat == null || location?.lng == null)
     return <span>Not Captured</span>;
 
   return (
@@ -544,7 +545,7 @@ export default function CookieDataDisplay() {
   const hasActiveFilters = Object.values(filters).some((val) => val !== "All");
   const mappedCookies = displayCookies.filter(
     (c) =>
-      c.location?.status === "allowed" && c.location?.lat && c.location?.lng,
+      c.location?.status === "allowed" && c.location?.lat != null && c.location?.lng != null,
   );
 
   if (loading) {

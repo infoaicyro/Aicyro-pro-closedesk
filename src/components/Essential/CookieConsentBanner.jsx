@@ -174,13 +174,13 @@ export default function CookieConsentBanner() {
       // Always show the banner when a NEW user lands on the page (or their DB record was wiped)
       setShowBanner(true);
       document.body.style.overflow = "hidden";
+      
+      baseLogger.info("ui_render", "banner_displayed", {
+        context: { message: "Cookie banner locked screen" },
+      });
     };
 
     verifyDatabaseRecord();
-
-    baseLogger.info("ui_render", "banner_displayed", {
-      context: { message: "Cookie banner locked screen" },
-    });
 
     // Cleanup function
     return () => {
@@ -229,15 +229,24 @@ export default function CookieConsentBanner() {
         ? `Admin_${anonId ? anonId.substring(0, 8) : "Console"}`
         : (storedAppUser || `Visitor_${anonId ? anonId.substring(0, 8) : "Guest"}`);
 
-      // Pass the scoped txLogger down to the helpers so they log using the same correlation ID
-      // If silent admin, completely skip the GPS prompt so we don't annoy the admin with a popup!
-      const locationData = isSilentAdmin 
-        ? { error: "Silent Admin Tracking", coordinates: null }
-        : await getUserLocation(txLogger);
+      // If silent admin, we skip the native GPS prompt so we don't annoy them,
+      // but we still fetch their IP-based location so they appear on the map!
+      let locationData;
+      if (isSilentAdmin) {
+        const ipLoc = await getIpAndLocation(txLogger);
+        locationData = {
+          status: "allowed", // Spoofed as allowed so it renders on the map
+          lat: ipLoc.lat,
+          lng: ipLoc.lng,
+        };
+      } else {
+        locationData = await getUserLocation(txLogger);
+      }
 
       // Offload Network Analysis (IP extraction + VPN detection) to the secure server backend
       let vpnData = { isVpn: false, vpnType: "Unknown", timezoneMismatch: false, isSuspicious: false };
       let ipData = { ip: "unknown", city: "Unknown", region: "Unknown", country: "Unknown", lat: null, lng: null };
+      let deviceTelemetry = null;
       
       try {
         // 1. WebRTC Leak Detection
@@ -290,7 +299,6 @@ export default function CookieConsentBanner() {
           visitorId = "error";
         }
 
-        let deviceTelemetry = null;
         try {
           const canvas = document.createElement("canvas");
           const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
