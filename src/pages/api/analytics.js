@@ -31,6 +31,8 @@ async function handler(req, res, apiLogger) {
     } else if (event_type === "conversation_started") {
       summaryField = "total_conversations_started";
       visitorCounterField = "conversations_count";
+    } else if (event_type === "dashboard_heartbeat") {
+      // Do nothing for global counters, just let the timestamp update flow below
     } else {
       return res.status(400).json({ error: "Invalid tracking event type" });
     }
@@ -44,10 +46,12 @@ async function handler(req, res, apiLogger) {
     // ──────────────────────────────────────────────────────────────────────────
     // A. Increment Global Platform Summary Counters
     // ──────────────────────────────────────────────────────────────────────────
-    const globalSummaryRef = ref(db, `analytics/summary/${summaryField}`);
-    await runTransaction(globalSummaryRef, (currentValue) => {
-      return (currentValue || 0) + 1;
-    });
+    if (summaryField) {
+      const globalSummaryRef = ref(db, `analytics/summary/${summaryField}`);
+      await runTransaction(globalSummaryRef, (currentValue) => {
+        return (currentValue || 0) + 1;
+      });
+    }
 
     // ──────────────────────────────────────────────────────────────────────────
     // B. Log Individual Chronological Event for this specific visitor
@@ -71,13 +75,15 @@ async function handler(req, res, apiLogger) {
     // ──────────────────────────────────────────────────────────────────────────
     // C. Update Individual Visitor Profile & Summary Counters
     // ──────────────────────────────────────────────────────────────────────────
-    const visitorSummaryRef = ref(
-      db,
-      `analytics/visitors/${anonId}/summary/${visitorCounterField}`,
-    );
-    await runTransaction(visitorSummaryRef, (currentVal) => {
-      return (currentVal || 0) + 1;
-    });
+    if (visitorCounterField) {
+      const visitorSummaryRef = ref(
+        db,
+        `analytics/visitors/${anonId}/summary/${visitorCounterField}`,
+      );
+      await runTransaction(visitorSummaryRef, (currentVal) => {
+        return (currentVal || 0) + 1;
+      });
+    }
 
     // Update profile metadata (Last active time, device name, username)
     const visitorMetaRef = ref(db, `analytics/visitors/${anonId}/profile`);

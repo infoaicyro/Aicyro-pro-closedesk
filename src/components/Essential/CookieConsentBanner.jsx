@@ -118,8 +118,8 @@ export default function CookieConsentBanner() {
   useEffect(() => {
     const isDashboard =
       typeof window !== "undefined" &&
-      (window.location.pathname === "/lg" ||
-        window.location.pathname.startsWith("/lg/"));
+      (window.location.pathname.replace(/\/+/g, "/") === "/lg" ||
+        window.location.pathname.replace(/\/+/g, "/").startsWith("/lg/"));
 
     const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
     
