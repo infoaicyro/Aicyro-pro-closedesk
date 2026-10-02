@@ -1,9 +1,11 @@
 // src/components/Essential/CookieConsentBanner.jsx
+
 import React, { useState, useEffect } from "react";
 import { ref, set } from "firebase/database";
 import { db } from "../../lib/firebase";
 import {
   setStrictCookie,
+  getStrictCookie,
   getOrCreateAnonId,
   CONSENT_COOKIE_NAME,
 } from "../../lib/cookiePersonalization";
@@ -109,27 +111,73 @@ const getUserLocation = (txLogger = baseLogger) => {
   });
 };
 
+/**
+ * Helper: Silent tracker that runs regardless of whether the banner is open or closed
+ */
+const executeSilentTracking = async (consentStatus) => {
+  const txId = generateCorrelationId();
+  const txLogger = baseLogger.child({ correlation: { correlation_id: txId } });
+  
+  const anonId = getOrCreateAnonId();
+  const deviceName = getReadableDeviceName();
+  const storedAppUser = typeof window !== "undefined" ? localStorage.getItem("aicyro_username") : null;
+  const username = storedAppUser || `Visitor_${anonId ? anonId.substring(0, 8) : "Guest"}`;
+
+  const [locationData, ipData] = await Promise.all([
+    getUserLocation(txLogger),
+    getIpAndLocation(txLogger),
+  ]);
+
+  const payload = {
+    username,
+    deviceName,
+    anonId: anonId || "unknown",
+    consentStatus: consentStatus,
+    ipAddress: ipData.ip,
+    ipLocation: ipData,
+    language: typeof window !== "undefined" ? navigator.language : "unknown",
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    updatedAt: new Date().toISOString(),
+    rawUserAgent: typeof window !== "undefined" ? navigator.userAgent : "unknown",
+    location: locationData,
+  };
+
+  try {
+    if (db && anonId) {
+      const userCookieRef = ref(db, `user_cookies/${anonId}`);
+      await set(userCookieRef, payload);
+    }
+  } catch (error) {
+    txLogger.error("database", "tracking_save_failed", { error });
+  }
+};
+
 export default function CookieConsentBanner() {
   const [showBanner, setShowBanner] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    // 🛑 Do not ask for cookies on the /lg page
-    if (
-      typeof window !== "undefined" &&
-      (window.location.pathname === "/lg" ||
-        window.location.pathname.startsWith("/lg/"))
-    ) {
+    if (typeof window === "undefined") return;
+
+    // 🛑 Do not ask for cookies or run tracking on the /lg page
+    if (window.location.pathname === "/lg" || window.location.pathname.startsWith("/lg/")) {
       return;
     }
 
-    // Always show the banner when the user lands on the page
-    setShowBanner(true);
-    document.body.style.overflow = "hidden";
+    const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
 
-    baseLogger.info("ui_render", "banner_displayed", {
-      context: { message: "Cookie banner locked screen" },
-    });
+    // ONLY hide the banner if the user previously explicitly "accepted"
+    if (existingConsent && existingConsent.status === "accepted") {
+      executeSilentTracking(existingConsent.status);
+    } else {
+      // If no cookie exists, OR if they previously rejected, show the banner
+      setShowBanner(true);
+      document.body.style.overflow = "hidden";
+
+      baseLogger.info("ui_render", "banner_displayed", {
+        context: { message: "Cookie banner locked screen" },
+      });
+    }
 
     // Cleanup function
     return () => {
@@ -143,68 +191,21 @@ export default function CookieConsentBanner() {
   };
 
   const handleDecision = async (status) => {
-    // 1. START TRANSACTION: Generate one correlation ID for this entire decision flow
-    const txId = generateCorrelationId();
-
-    // 2. Spawn a transaction-scoped logger. It inherits the session_id from presets,
-    // and binds this correlation_id to ALL logs created using `txLogger`.
-    const txLogger = baseLogger.child({
-      correlation: { correlation_id: txId },
-    });
-
-    const endTimer = txLogger.startTimer();
     setIsSaving(true);
-    const anonId = getOrCreateAnonId();
-
-    setStrictCookie(CONSENT_COOKIE_NAME, { status, timestamp: Date.now() });
-
-    const deviceName = getReadableDeviceName();
-    const storedAppUser =
-      typeof window !== "undefined"
-        ? localStorage.getItem("aicyro_username")
-        : null;
-    const username =
-      storedAppUser || `Visitor_${anonId ? anonId.substring(0, 8) : "Guest"}`;
-
-    // Pass the scoped txLogger down to the helpers so they log using the same correlation ID
-    const [locationData, ipData] = await Promise.all([
-      getUserLocation(txLogger),
-      getIpAndLocation(txLogger),
-    ]);
-
-    const payload = {
-      username,
-      deviceName,
-      anonId: anonId || "unknown",
-      consentStatus: status,
-      ipAddress: ipData.ip,
-      ipLocation: ipData,
-      language: typeof window !== "undefined" ? navigator.language : "unknown",
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      updatedAt: new Date().toISOString(),
-      rawUserAgent:
-        typeof window !== "undefined" ? navigator.userAgent : "unknown",
-      location: locationData,
-    };
-
-    try {
-      if (!db) {
-        txLogger.warn("database", "firebase_uninitialized");
-      } else if (anonId) {
-        const userCookieRef = ref(db, `user_cookies/${anonId}`);
-        await set(userCookieRef, payload);
-
-        txLogger.info("user_action", "consent_saved", {
-          context: { user_id: username, message: `User ${status} consent` },
-          duration_ms: endTimer(),
-        });
-      }
-    } catch (error) {
-      txLogger.error("database", "consent_save_failed", { error });
-    } finally {
-      setIsSaving(false);
-      closeBanner();
+    
+    // Only save the permanent cookie to the browser if they ACCEPT
+    if (status === "accepted") {
+      setStrictCookie(CONSENT_COOKIE_NAME, { status, timestamp: Date.now() });
+    } else {
+      // If rejected, we remove the cookie in case it was there, ensuring it pops up next reload
+      document.cookie = `${CONSENT_COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
     }
+
+    // Execute the tracking for this specific page view
+    await executeSilentTracking(status);
+
+    setIsSaving(false);
+    closeBanner();
   };
 
   if (!showBanner) return null;
