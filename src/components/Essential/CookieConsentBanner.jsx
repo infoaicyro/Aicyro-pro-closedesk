@@ -1,6 +1,6 @@
 // src/components/Essential/CookieConsentBanner.jsx
 import React, { useState, useEffect } from "react";
-import { ref, set, update } from "firebase/database";
+import { ref, set, update, get } from "firebase/database";
 import { db } from "../../lib/firebase";
 import {
   setStrictCookie,
@@ -131,9 +131,18 @@ export default function CookieConsentBanner() {
       const anonId = getOrCreateAnonId();
       if (anonId && db) {
         const userCookieRef = ref(db, `user_cookies/${anonId}`);
-        update(userCookieRef, { updatedAt: new Date().toISOString() }).catch(() => {});
+        get(userCookieRef).then((snapshot) => {
+          if (snapshot.exists()) {
+            update(userCookieRef, { updatedAt: new Date().toISOString() }).catch(() => {});
+          } else {
+            // The user has the browser cookie but their database record was deleted!
+            // Show the banner again to regenerate their full data payload.
+            setShowBanner(true);
+            document.body.style.overflow = "hidden";
+          }
+        }).catch(() => {});
       }
-      return; // Do not show the banner
+      return; // Do not show the banner by default
     }
 
     // Always show the banner when a NEW user lands on the page
