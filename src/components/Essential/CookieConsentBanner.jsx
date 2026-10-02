@@ -116,11 +116,6 @@ export default function CookieConsentBanner() {
   const router = useRouter();
 
   useEffect(() => {
-    const isDashboard =
-      typeof window !== "undefined" &&
-      (window.location.pathname === "/lg" ||
-        window.location.pathname.startsWith("/lg/"));
-
     const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
     
     if (existingConsent) {
@@ -133,9 +128,9 @@ export default function CookieConsentBanner() {
         get(userCookieRef).then((snapshot) => {
           if (snapshot.exists() && snapshot.val().consentStatus) {
             update(userCookieRef, { updatedAt: new Date().toISOString() }).catch(() => {});
-          } else if (!isDashboard) {
+          } else {
             // The user has the browser cookie but their database record is missing or corrupted
-            // Show the banner again to regenerate their full data payload (unless on the dashboard).
+            // Show the banner again to regenerate their full data payload.
             setShowBanner(true);
             document.body.style.overflow = "hidden";
           }
@@ -143,9 +138,6 @@ export default function CookieConsentBanner() {
       }
       return; // Do not show the banner by default
     }
-
-    // 🛑 Do not ask for NEW cookies on the /lg page
-    if (isDashboard) return;
 
     // Always show the banner when a NEW user lands on the page
     setShowBanner(true);
