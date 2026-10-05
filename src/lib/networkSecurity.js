@@ -107,6 +107,12 @@ export async function getDetailedVpnStatus(
     } else {
       console.log(`[networkSecurity] WebRTC Dual-Stack Exception. IPv6 HTTP: ${ip}, IPv4 WebRTC: ${webrtcIp}`);
     }
+  } else if (webrtcIp === null) {
+    // Aggressive Fallback: WebRTC was completely blocked by the browser.
+    result.isVpn = true;
+    result.vpnType = "Privacy Shield / VPN Extension";
+    result.isSuspicious = true;
+    console.log(`[networkSecurity] WebRTC Blocked! Flagging as VPN.`);
   }
 
   // 2. Datacenter / ASN Profiling
@@ -197,6 +203,24 @@ export async function getDetailedVpnStatus(
         if (txLogger && typeof txLogger.warn === 'function') {
           txLogger.warn("network_request", "vpn_api_warning", { message: data.message });
         }
+      }
+    }
+
+    // Secondary Aggressive Fallback: IPInfo Blackbox (Free VPN detection endpoint)
+    // We only run this if the primary heuristics/ProxyCheck didn't already catch it.
+    if (!result.isVpn && !result.isTunnel) {
+      try {
+        const blackboxRes = await fetch(`https://blackbox.ipinfo.app/lookup/${ip}`, { signal: controller.signal });
+        if (blackboxRes.ok) {
+          const blackboxText = await blackboxRes.text();
+          if (blackboxText.trim() === 'Y') {
+            result.isVpn = true;
+            result.vpnType = "VPN (Blackbox IPInfo)";
+            result.isSuspicious = true;
+          }
+        }
+      } catch (bbError) {
+        // Ignore secondary API failure
       }
     }
   } catch (error) {
