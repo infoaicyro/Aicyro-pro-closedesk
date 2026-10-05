@@ -175,11 +175,23 @@ export default function CookieConsentBanner() {
     if (currentPath === "/lg" || currentPath.startsWith("/lg/")) return;
     if (currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/")) return;
 
+    const anonId = getOrCreateAnonId();
+    
+    // INSTANTLY reset sessionStartAt when the user refreshes or loads the page
+    if (anonId && db) {
+      import("firebase/database").then(({ ref, update }) => {
+        update(ref(db, `user_cookies/${anonId}`), {
+          sessionStartAt: new Date().toISOString(),
+          lastActiveAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }).catch(() => {});
+      });
+    }
+
     const pingActivity = async () => {
       // Only ping Firebase if the user is actively looking at this tab
       if (document.visibilityState !== "visible") return;
       
-      const anonId = getOrCreateAnonId();
       if (anonId && db) {
         try {
           const { ref, update } = await import("firebase/database");
@@ -250,6 +262,7 @@ export default function CookieConsentBanner() {
             language: typeof window !== "undefined" ? navigator.language : "unknown",
             timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
             createdAt: new Date().toISOString(),
+            sessionStartAt: new Date().toISOString(),
             lastActiveAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             rawUserAgent: typeof window !== "undefined" ? navigator.userAgent : "unknown",
