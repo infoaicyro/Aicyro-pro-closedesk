@@ -42,9 +42,16 @@ export default async function handler(req, res) {
     // If the browser fetched a public IP (clientIp) that DOES NOT match our server's edgeIp,
     // it mathematically proves an extension is proxying external domains but bypassing our domain!
     if (clientIp && clientIp !== edgeIp && clientIp !== '127.0.0.1' && clientIp !== '::1' && edgeIp !== '127.0.0.1') {
-      hasProxyHeaders = true;
-      extensionMismatchType = "Browser VPN Extension";
-      console.log(`[check-network] EXTENSION MISMATCH DETECTED! Browser sees: ${clientIp}, Server sees: ${edgeIp}`);
+      const isClientIpv6 = clientIp.includes(':');
+      const isEdgeIpv6 = edgeIp.includes(':');
+      
+      if (isClientIpv6 !== isEdgeIpv6) {
+        console.log(`[check-network] Bypassing extension mismatch due to Dual-Stack: Browser is ${isClientIpv6 ? 'IPv6' : 'IPv4'}, Server is ${isEdgeIpv6 ? 'IPv6' : 'IPv4'}.`);
+      } else {
+        hasProxyHeaders = true;
+        extensionMismatchType = "Browser VPN Extension";
+        console.log(`[check-network] EXTENSION MISMATCH DETECTED! Browser sees: ${clientIp}, Server sees: ${edgeIp}`);
+      }
     }
 
     console.log(`[check-network] Edge IP: ${edgeIp} (local: ${isLocalHttpIp}), WebRTC TRUE IP: ${webrtcIp || "null"}, Client IP: ${clientIp || "null"}`);
