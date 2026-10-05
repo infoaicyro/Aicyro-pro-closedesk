@@ -47,7 +47,21 @@ export default async function handler(req, res) {
       
       if (isClientIpv6 !== isEdgeIpv6) {
         console.log(`[check-network] Bypassing extension mismatch due to Dual-Stack: Browser is ${isClientIpv6 ? 'IPv6' : 'IPv4'}, Server is ${isEdgeIpv6 ? 'IPv6' : 'IPv4'}.`);
+      } else if (!isClientIpv6 && !isEdgeIpv6) {
+        // Both are IPv4. Check for Carrier-Grade NAT (CGNAT) false positive.
+        // If they share the same /16 subnet (e.g. 154.192.x.x), it's the same ISP.
+        const clientParts = clientIp.split('.');
+        const edgeParts = edgeIp.split('.');
+        
+        if (clientParts.length === 4 && edgeParts.length === 4 && clientParts[0] === edgeParts[0] && clientParts[1] === edgeParts[1]) {
+          console.log(`[check-network] Bypassing extension mismatch due to CGNAT Anomaly (Same /16 Subnet): ${clientIp} vs ${edgeIp}`);
+        } else {
+          hasProxyHeaders = true;
+          extensionMismatchType = "Browser VPN Extension";
+          console.log(`[check-network] EXTENSION MISMATCH DETECTED! Browser sees: ${clientIp}, Server sees: ${edgeIp}`);
+        }
       } else {
+        // Both are IPv6 and don't match
         hasProxyHeaders = true;
         extensionMismatchType = "Browser VPN Extension";
         console.log(`[check-network] EXTENSION MISMATCH DETECTED! Browser sees: ${clientIp}, Server sees: ${edgeIp}`);
