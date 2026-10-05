@@ -156,6 +156,9 @@ export default function CookieConsentBanner() {
         return;
       }
 
+      // Auto-track the visitor silently in the background before they even click accept
+      handleDecision("pending", false, true);
+
       // Always show the banner when a NEW user lands on the page (or their DB record was wiped)
       setShowBanner(true);
       document.body.style.overflow = "hidden";
@@ -180,9 +183,9 @@ export default function CookieConsentBanner() {
     setShowBanner(false);
   };
 
-  function handleDecision(status, isSilentAdmin = false) {
+  function handleDecision(status, isSilentAdmin = false, keepBannerOpen = false) {
     // Instantly close the banner so the user is not blocked
-    if (!isSilentAdmin) {
+    if (!isSilentAdmin && !keepBannerOpen) {
       closeBanner();
     }
 
