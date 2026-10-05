@@ -195,27 +195,19 @@ export async function getDetailedVpnStatus(
         
         // If ProxyCheck flags it as a Proxy/VPN
         if (data[ip].proxy === "yes") {
-          // Trust ProxyCheck's explicit type if it confidently classifies it as a VPN
-          if (data[ip].type === "VPN") {
+          const providerLower = (data[ip].provider || result.asnOrg).toLowerCase();
+          const isCloud = cloudProviders.some(dc => providerLower.includes(dc));
+          
+          if (isCloud && !vpnHosts.some(vh => providerLower.includes(vh))) {
+            // It's a pure Datacenter (like AWS). Classify as Tunnel, not VPN.
+            result.isVpn = false;
+            result.isTunnel = true;
+            result.vpnType = data[ip].type || "Datacenter Tunnel";
+          } else {
+            // It's a Commercial VPN (like M247) or generic Proxy
             result.isVpn = true;
             result.isTunnel = false;
-            result.vpnType = "Commercial VPN";
-          } else {
-            // It didn't explicitly say "VPN", so we evaluate based on ASN
-            const providerLower = (data[ip].provider || result.asnOrg).toLowerCase();
-            const isCloud = cloudProviders.some(dc => providerLower.includes(dc));
-            
-            if (isCloud && !vpnHosts.some(vh => providerLower.includes(vh))) {
-              // It's a pure Datacenter (like AWS). Classify as Tunnel, not VPN.
-              result.isVpn = false;
-              result.isTunnel = true;
-              result.vpnType = data[ip].type || "Datacenter Tunnel";
-            } else {
-              // It's a Commercial VPN (like M247) or generic Proxy
-              result.isVpn = true;
-              result.isTunnel = false;
-              result.vpnType = data[ip].type || "VPN/Proxy";
-            }
+            result.vpnType = data[ip].type === "VPN" ? "Commercial VPN" : (data[ip].type || "VPN/Proxy");
           }
           result.isSuspicious = true;
         }
