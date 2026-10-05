@@ -120,8 +120,8 @@ export default function CookieConsentBanner() {
     const isDashboard = currentPath === "/lg" || currentPath.startsWith("/lg/");
     const isPulse = currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/");
 
-    if (isPulse) {
-      return; // Exclude /pulse route entirely from tracking
+    if (isDashboard || isPulse) {
+      return; // Exclude Admin/Dashboard/Pulse routes entirely from tracking
     }
 
     const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
@@ -142,27 +142,6 @@ export default function CookieConsentBanner() {
             // ignore network errors, assume it exists to prevent spamming
           }
         }
-      }
-
-      // 🛑 If they are an Admin on the dashboard, FORCE them into the Admin role
-      // This ensures if they previously got tracked as a normal visitor, they are instantly upgraded to an Admin
-      if (isDashboard) {
-        handleDecision("accepted", true);
-        
-        // 🔄 Realtime Admin Heartbeat: Continuously ping Firebase every 30 seconds
-        adminHeartbeat = setInterval(async () => {
-          const anonId = getOrCreateAnonId();
-          if (anonId && db) {
-            try {
-              const { ref, update } = await import("firebase/database");
-              await update(ref(db, `user_cookies/${anonId}`), {
-                updatedAt: new Date().toISOString()
-              });
-            } catch (e) {}
-          }
-        }, 30000);
-
-        return; 
       }
 
       // If they already accepted AND the database record is safe, do nothing
@@ -187,7 +166,6 @@ export default function CookieConsentBanner() {
     // Cleanup function
     return () => {
       document.body.style.overflow = "auto";
-      if (adminHeartbeat) clearInterval(adminHeartbeat);
     };
   }, [router.pathname]);
 
