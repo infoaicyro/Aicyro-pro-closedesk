@@ -116,19 +116,21 @@ export async function getDetailedVpnStatus(
   }
 
   // 2. Datacenter / ASN Profiling
-  const knownDatacenters = [
-    'm247', 'amazon', 'aws', 'digitalocean', 'ovh', 'hetzner', 
-    'linode', 'choopa', 'cdn77', 'leaseweb', 'microsoft', 'azure', 'google cloud',
-    'hosting', 'datacenter', 'server', 'colocation', 'vps'
-  ];
+  const vpnHosts = ['m247', 'choopa', 'cdn77', 'leaseweb', 'datacamp', 'quadranet', 'cogent', 'datapacket'];
+  const cloudProviders = ['amazon', 'aws', 'digitalocean', 'ovh', 'hetzner', 'linode', 'microsoft', 'azure', 'google cloud', 'hosting', 'datacenter', 'server', 'colocation', 'vps'];
   
-  const isDatacenter = ipOrg !== "Unknown" && knownDatacenters.some(dc => ipOrg.toLowerCase().includes(dc));
+  const orgLower = ipOrg.toLowerCase();
   
-  if (isDatacenter) {
+  if (vpnHosts.some(dc => orgLower.includes(dc))) {
+    result.isVpn = true;
+    result.isTunnel = false;
+    result.vpnType = "Commercial VPN Node";
+    result.isSuspicious = true;
+  } else if (cloudProviders.some(dc => orgLower.includes(dc))) {
     result.isVpn = false;
     result.isTunnel = true;
-    result.vpnType = "Commercial Datacenter Tunnel";
-    result.isSuspicious = true; // Still suspicious, but labeled correctly as a tunnel
+    result.vpnType = "Datacenter Tunnel";
+    result.isSuspicious = true;
   }
 
   // 3. Hardware Emulation Profiling (WebGL Telemetry)
@@ -180,12 +182,22 @@ export async function getDetailedVpnStatus(
           result.asnOrg = data[ip].provider;
         }
         
-        // If ProxyCheck flags it as a Proxy/VPN, it is a VPN (even if hosted in a Datacenter!)
+        // If ProxyCheck flags it as a Proxy/VPN
         if (data[ip].proxy === "yes") {
-          result.isVpn = true;
-          result.isTunnel = false;
-          // ProxyCheck usually provides the specific type (e.g., "VPN", "Proxy", "TOR")
-          result.vpnType = data[ip].type || "VPN";
+          const providerLower = (data[ip].provider || result.asnOrg).toLowerCase();
+          const isCloud = cloudProviders.some(dc => providerLower.includes(dc));
+          
+          if (isCloud && !vpnHosts.some(vh => providerLower.includes(vh))) {
+            // It's a pure Datacenter (like AWS). Classify as Tunnel, not VPN.
+            result.isVpn = false;
+            result.isTunnel = true;
+            result.vpnType = data[ip].type || "Datacenter Tunnel";
+          } else {
+            // It's a Commercial VPN (like M247/TouchVPN) or Residential VPN
+            result.isVpn = true;
+            result.isTunnel = false;
+            result.vpnType = data[ip].type || "VPN";
+          }
           result.isSuspicious = true;
         } else {
           // ProxyCheck verifies this is NOT a known public VPN/Proxy.
