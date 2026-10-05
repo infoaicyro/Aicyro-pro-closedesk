@@ -19,9 +19,10 @@ async function sendAnalyticsEvent(eventType, payload = {}) {
 
   const currentPath = window.location.pathname;
 
-  // 🛑 MASTER GUARD: Completely disable all tracking on the /lg page or any /lg/* sub-pages
-  if (currentPath === "/lg" || currentPath.startsWith("/lg/")) {
-    return;
+  // 🛑 Prevent dashboard views from corrupting public analytics stats
+  let finalEventType = eventType;
+  if (currentPath.replace(/\/+/g, "/").startsWith("/lg")) {
+    finalEventType = "dashboard_heartbeat";
   }
 
   const anonId = getOrCreateAnonId() || "unknown";
@@ -33,7 +34,7 @@ async function sendAnalyticsEvent(eventType, payload = {}) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        event_type: eventType,
+        event_type: finalEventType,
         anonId,
         deviceName: getReadableDeviceName(),
         username,
@@ -50,10 +51,8 @@ async function sendAnalyticsEvent(eventType, payload = {}) {
  * 1. Track Website Visit (With Exclusion Guard & 3-Second Deduplication Lock)
  */
 export function trackVisit(pagePath = "/") {
-  // 🛑 Skip tracking immediately if navigating to /lg
-  if (pagePath === "/lg" || pagePath.startsWith("/lg/")) {
-    return;
-  }
+  // We removed the hard block here so dashboard admins can still send heartbeats.
+  // The event_type is swapped to "dashboard_heartbeat" in sendAnalyticsEvent.
 
   const now = Date.now();
   // Prevent duplicate logs if the same page mounts twice within 3 seconds
