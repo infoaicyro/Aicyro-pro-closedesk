@@ -118,7 +118,7 @@ export default function CookieConsentBanner() {
   useEffect(() => {
     const currentPath = router.pathname ? router.pathname.replace(/\/+/g, "/") : "";
     const isDashboard = currentPath === "/lg" || currentPath.startsWith("/lg/");
-    const isPulse = currentPath === "/pulse" || currentPath.startsWith("/pulse/");
+    const isPulse = currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/");
 
     if (isPulse) {
       return; // Exclude /pulse route entirely from tracking
@@ -196,7 +196,7 @@ export default function CookieConsentBanner() {
   useEffect(() => {
     const currentPath = router.pathname ? router.pathname.replace(/\/+/g, "/") : "";
     if (currentPath === "/lg" || currentPath.startsWith("/lg/")) return;
-    if (currentPath === "/pulse" || currentPath.startsWith("/pulse/")) return;
+    if (currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/")) return;
 
     const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
     if (!existingConsent || showBanner) return; // Only heartbeat if they've accepted and banner is closed
