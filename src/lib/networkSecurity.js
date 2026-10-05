@@ -93,12 +93,6 @@ export async function getDetailedVpnStatus(
   // leaked via raw UDP (bypassing the VPN tunnel) - the user's TRUE ISP IP.
   // If they don't match, the HTTP IP is a VPN exit node. Flag it.
   if (webrtcIp && webrtcIp !== ip) {
-    // Exception: Do not flag if the HTTP IP is IPv6 and the STUN leaked IP is IPv4.
-    // This is a common dual-stack ISP configuration, not a VPN leak.
-    const isIpV6 = ip.includes(':');
-    const isWebrtcIpV4 = webrtcIp.includes('.');
-
-  if (webrtcIp && webrtcIp !== ip) {
     const isIpV6 = ip.includes(':');
     const isWebrtcIpV6 = webrtcIp.includes(':');
 

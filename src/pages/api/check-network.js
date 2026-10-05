@@ -36,8 +36,6 @@ export default async function handler(req, res) {
       }
     }
 
-    }
-
     console.log(`[check-network] Edge IP: ${edgeIp} (local: ${isLocalHttpIp}), WebRTC TRUE IP: ${webrtcIp || "null"}, Client IP: ${clientIp || "null"}`);
 
     // 3. Localhost Bypass:
