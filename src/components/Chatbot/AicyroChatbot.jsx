@@ -179,8 +179,8 @@ const TypewriterBubble = ({ msg, onButtonClick, scrollRef, isProcessing, onSpeak
       <div className="relative group px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap bg-[var(--card-bg)] text-[var(--foreground)] rounded-2xl rounded-bl-sm border border-[var(--border-color)] shadow-sm">
         {displayedText}
         {isTypingText && <span className="inline-block w-1.5 h-3.5 ml-1 bg-[var(--primary)] animate-pulse align-middle" />}
-        {!isTypingText && (
-          <button onClick={() => onSpeak(msg.text)} className="ml-2 inline-flex items-center text-xs opacity-60 hover:opacity-100 transition-opacity outline-none rounded" title="Read Aloud" type="button">🔊</button>
+        {!isTypingText && msg.isLastChunk !== false && (
+          <button onClick={() => onSpeak(msg.fullText || msg.text)} className="ml-2 inline-flex items-center text-xs opacity-60 hover:opacity-100 transition-opacity outline-none rounded" title="Read Aloud" type="button">🔊</button>
         )}
       </div>
       {!isTypingText && msg.buttons?.length > 0 && (
@@ -774,6 +774,7 @@ export default function AicyroChatbot() {
     
     // Split the text by the | delimiter to create chunks
     const chunks = text.split("|").map(t => t.trim()).filter(Boolean);
+    const fullMessageText = chunks.join(" "); // Combine for the TTS reader
     
     // If it's an instant message (like loading history or a fallback error), dump them all at once
     if (isInstant) {
@@ -782,10 +783,12 @@ export default function AicyroChatbot() {
         ...chunks.map((chunk, index) => ({
           role: "bot",
           text: chunk,
+          fullText: fullMessageText,
           buttons: index === chunks.length - 1 ? buttons : [], // Only last chunk gets buttons
           instant: true,
           spoken: false,
-          id: Date.now() + Math.random() + index
+          id: Date.now() + Math.random() + index,
+          isLastChunk: index === chunks.length - 1 // Fixes speaker bug
         }))
       ]);
       return;
@@ -799,8 +802,6 @@ export default function AicyroChatbot() {
       const isLast = i === chunks.length - 1;
       
       // Calculate dynamic delay before this bubble appears
-      // Typewriter component types at 15ms per character.
-      // We wait for the previous bubble to finish typing, PLUS a human pause (800ms).
       const prevTypingTime = i === 0 ? 0 : chunks[i - 1].length * 15;
       const humanPause = i === 0 ? 600 : 800; 
       const delay = prevTypingTime + humanPause;
@@ -812,17 +813,16 @@ export default function AicyroChatbot() {
         { 
           role: "bot", 
           text: chunk, 
+          fullText: fullMessageText,
           buttons: isLast ? buttons : [], 
           instant: false, 
           spoken: false, 
-          id: Date.now() + Math.random() 
+          id: Date.now() + Math.random(),
+          isLastChunk: isLast
         }
       ]);
       
-      // If it's the final chunk, turn off the 3 bouncing dots
-      if (isLast) {
-        setIsTyping(false);
-      }
+      if (isLast) setIsTyping(false);
     }
   }
   // ==========================================
@@ -1338,7 +1338,7 @@ export default function AicyroChatbot() {
                             onClick={(e) => { e.stopPropagation(); setShowImagePicker(false); fileGalleryInputRef.current?.click(); }}
                             className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--background)] rounded-xl transition-colors text-left w-full"
                           >
-                            <span>🖼️️</span> Upload from Gallery
+                            <span>🖼</span> Upload from Gallery
                           </div>
                         </div>
                       )}
