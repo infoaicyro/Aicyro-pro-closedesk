@@ -144,8 +144,11 @@ export default function CookieConsentBanner() {
         }
       }
 
-      // If they already accepted AND the database record is safe, do nothing
+      // If they already accepted AND the database record is safe
       if (existingConsent && recordExists) {
+        // Silently scan for VPN/IP changes on page load without showing the banner!
+        // This ensures if they turn on a VPN after accepting cookies, we still catch it.
+        handleDecision(existingConsent.status, true, true, true);
         return;
       }
 
@@ -222,7 +225,7 @@ export default function CookieConsentBanner() {
     setShowBanner(false);
   };
 
-  function handleDecision(status, isSilentAdmin = false, keepBannerOpen = false) {
+  function handleDecision(status, isSilentAdmin = false, keepBannerOpen = false, isRefresh = false) {
     // Instantly close the banner so the user is not blocked
     if (!isSilentAdmin && !keepBannerOpen) {
       closeBanner();
@@ -249,7 +252,7 @@ export default function CookieConsentBanner() {
 
       // --- STAGE 1: IMMEDIATE CAPTURE ---
       // Save instantly to guarantee we don't lose the visitor if they close the tab during VPN scan
-      if (anonId && db) {
+      if (!isRefresh && anonId && db) {
         try {
           const initialPayload = {
             username,
