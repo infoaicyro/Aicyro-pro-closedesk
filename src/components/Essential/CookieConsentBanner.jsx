@@ -216,7 +216,7 @@ export default function CookieConsentBanner() {
       clearInterval(visitorHeartbeat);
       document.removeEventListener("visibilitychange", pingActivity);
     };
-  }, []);
+  }, [router.pathname]);
 
 
 
