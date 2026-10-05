@@ -174,22 +174,13 @@ export async function getDetailedVpnStatus(
           result.asnOrg = data[ip].provider;
         }
         
-        // If ProxyCheck flags it as a Proxy/VPN
+        // If ProxyCheck flags it as a Proxy/VPN, it is a VPN (even if hosted in a Datacenter!)
         if (data[ip].proxy === "yes") {
-          const isKnownDc = knownDatacenters.some(dc => (data[ip].provider || result.asnOrg).toLowerCase().includes(dc));
-          
-          if (isKnownDc) {
-            // It's a Datacenter (like AWS). Classify as Tunnel, not VPN.
-            result.isVpn = false;
-            result.isTunnel = true;
-            result.vpnType = "Datacenter Tunnel";
-            result.isSuspicious = true;
-          } else {
-            result.isVpn = true;
-            result.isTunnel = false;
-            result.vpnType = data[ip].type || "VPN";
-            result.isSuspicious = true;
-          }
+          result.isVpn = true;
+          result.isTunnel = false;
+          // ProxyCheck usually provides the specific type (e.g., "VPN", "Proxy", "TOR")
+          result.vpnType = data[ip].type || "VPN";
+          result.isSuspicious = true;
         } else {
           // ProxyCheck verifies this is NOT a known public VPN/Proxy.
           if (result.isVpn) {
