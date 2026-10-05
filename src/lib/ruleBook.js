@@ -6,7 +6,7 @@ import { ref, get } from "firebase/database";
  * ============================================================================
  * SINGLE SOURCE OF TRUTH ARCHITECTURE & BOUNDARIES
  * ============================================================================
- * Policy Version: 2.12.0
+ * Policy Version: 2.13.0
  *
  * --- VOICE ROLLBACK PROCEDURE (KILL SWITCH) ---
  * If production issues occur with the Realtime Voice API (e.g., latency,
@@ -20,7 +20,7 @@ import { ref, get } from "firebase/database";
  *    /api/openai-token endpoint will block further connection attempts.
  * ============================================================================
  */
-export const POLICY_VERSION = "2.12.0";
+export const POLICY_VERSION = "2.13.0";
 
 export async function getMasterRuleBook(
   mode = "text",
@@ -291,7 +291,9 @@ ${categorySpecificFlow ? `\n${categorySpecificFlow}\n` : ""}
 7. NO DIAGNOSIS: Use the customer’s description to route appropriately; do NOT claim a technical diagnosis without a qualified physical inspection.
 8. NO UNSUPPORTED PRICING/PROMISES: Only use tenant-approved pricing, guarantees, SLAs, service areas, and availability from the Knowledge base. Do not make up numbers.
 9. NO FALSE BOOKING: Confirmation must come from the API result. Never tell a customer an appointment is booked or a quote is finalized until the system state confirms it.
-10. HUMAN HANDOFF: Always available for explicit requests, safety concerns, complex/unsupported cases, or repeated tool failure.`;
+10. HUMAN HANDOFF: Always available for explicit requests, safety concerns, complex/unsupported cases, or repeated tool failure.
+11. EMPATHY & ACKNOWLEDGMENT: Always acknowledge the user's situation empathetically to the severity of the issue BEFORE asking the next question. (e.g., "Oh no, a burst pipe is incredibly stressful. Let's get this sorted out fast. What is your ZIP code?").
+12. BAN ROBOTIC VOCABULARY: NEVER use robotic phrases like "As an AI...", "Please provide your...", or "I have updated your context." INSTEAD, force the use of natural contractions (I'm, we'll, let's) and conversational fillers ("Got it," "Makes sense," "Sure thing."). Speak like a real human concierge.`;
 
   if (mode === "text") {
     instructions += `\n\nCURRENTLY COLLECTED DATA:\n${JSON.stringify(currentLeadData || {})}`;
