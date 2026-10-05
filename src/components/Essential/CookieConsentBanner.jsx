@@ -364,15 +364,27 @@ export default function CookieConsentBanner() {
           // ignore webgl extraction errors
         }
 
-        // 3. Force IPv4 fetch to catch browser VPN extensions (IPv6 leak bypassing)
+        // 3. Force public IP fetch to catch browser VPN extensions.
+        // Use multiple providers because VPN adblockers (like VeePN) often block ipify!
         let clientIp = null;
         try {
           const ipRes = await fetch("https://api.ipify.org?format=json");
           if (ipRes.ok) {
-            const ipData = await ipRes.json();
-            clientIp = ipData.ip;
+            clientIp = (await ipRes.json()).ip;
           }
         } catch(e) {}
+        
+        // Unblockable Fallback: Cloudflare Trace
+        if (!clientIp) {
+          try {
+            const cfRes = await fetch("https://1.1.1.1/cdn-cgi/trace");
+            if (cfRes.ok) {
+              const cfText = await cfRes.text();
+              const ipMatch = cfText.match(/ip=([^\n]+)/);
+              if (ipMatch) clientIp = ipMatch[1].trim();
+            }
+          } catch (e) {}
+        }
 
         const networkResponse = await fetch("/api/check-network", {
           method: "POST",

@@ -199,16 +199,6 @@ export async function getDetailedVpnStatus(
             result.vpnType = data[ip].type || "VPN";
           }
           result.isSuspicious = true;
-        } else {
-          // ProxyCheck verifies this is NOT a known public VPN/Proxy.
-          if (result.isVpn) {
-            result.isVpn = false;
-            result.isTunnel = true;
-            result.vpnType = result.vpnType === "WebRTC UDP Leak Detected" 
-              ? "Private Corporate Tunnel" 
-              : "Private Datacenter Tunnel";
-            result.isSuspicious = false;
-          }
         }
       } else if (data.status === "warning" || data.status === "error") {
         result.apiFailed = true;
