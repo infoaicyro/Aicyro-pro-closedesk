@@ -765,10 +765,68 @@ export default function AicyroChatbot() {
   const handleAvatarLeave = () => { setIsHovered(false); };
   const handleAvatarClick = (e) => { e.stopPropagation(); if (avatarEffect) return; setAvatarEffect("animate-avatar-flip"); setSpeechText("Whoa! 🚀"); setTimeout(() => { setAvatarEffect(""); if (isHovered) setSpeechText("Ready for action!"); }, 1000); };
 
-  function addBotMessage(text, buttons = [], isInstant = false) {
-    if (isInstant) { setMessages((prev) => [...prev, { role: "bot", text, buttons, instant: true, spoken: false, id: Date.now() + Math.random() }]); } 
-    else { setIsTyping(true); setTimeout(() => { setIsTyping(false); setMessages((prev) => [...prev, { role: "bot", text, buttons, instant: false, spoken: false, id: Date.now() + Math.random() }]); }, 600); }
+
+  // ==========================================
+  // 🔥 HUMAN-LIKE MESSAGE CHUNKING SYSTEM
+  // ==========================================
+  async function addBotMessage(text, buttons = [], isInstant = false) {
+    if (!text) return;
+    
+    // Split the text by the | delimiter to create chunks
+    const chunks = text.split("|").map(t => t.trim()).filter(Boolean);
+    
+    // If it's an instant message (like loading history or a fallback error), dump them all at once
+    if (isInstant) {
+      setMessages((prev) => [
+        ...prev,
+        ...chunks.map((chunk, index) => ({
+          role: "bot",
+          text: chunk,
+          buttons: index === chunks.length - 1 ? buttons : [], // Only last chunk gets buttons
+          instant: true,
+          spoken: false,
+          id: Date.now() + Math.random() + index
+        }))
+      ]);
+      return;
+    }
+
+    // Otherwise, simulate a human typing multiple separate bubbles
+    setIsTyping(true);
+    
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const isLast = i === chunks.length - 1;
+      
+      // Calculate dynamic delay before this bubble appears
+      // Typewriter component types at 15ms per character.
+      // We wait for the previous bubble to finish typing, PLUS a human pause (800ms).
+      const prevTypingTime = i === 0 ? 0 : chunks[i - 1].length * 15;
+      const humanPause = i === 0 ? 600 : 800; 
+      const delay = prevTypingTime + humanPause;
+      
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      
+      setMessages((prev) => [
+        ...prev, 
+        { 
+          role: "bot", 
+          text: chunk, 
+          buttons: isLast ? buttons : [], 
+          instant: false, 
+          spoken: false, 
+          id: Date.now() + Math.random() 
+        }
+      ]);
+      
+      // If it's the final chunk, turn off the 3 bouncing dots
+      if (isLast) {
+        setIsTyping(false);
+      }
+    }
   }
+  // ==========================================
+
 
   function addUserMessage(text) {
     setMessages((prev) => {
@@ -785,7 +843,7 @@ export default function AicyroChatbot() {
     setStep(STEPS.CONFIRM_BOOKING);
     uiLogger.info("booking_lifecycle", "booking_requested", { context: { session_id: firebaseDbId, target_time: finalData.display_time }});
     addBotMessage(
-      `Great! Before I lock this in, please confirm your details:\n\n• Name: ${finalData.name || "N/A"}\n• Email: ${finalData.email || "N/A"}\n• Phone: ${finalData.phone || "N/A"}\n• Meeting: ${finalData.display_time}\n\nDoes everything look correct?`,
+      `Great! Before I lock this in, please confirm your details: | • Name: ${finalData.name || "N/A"}\n• Email: ${finalData.email || "N/A"}\n• Phone: ${finalData.phone || "N/A"}\n• Meeting: ${finalData.display_time} | Does everything look correct?`,
       [{ label: "Yes, Confirm Booking", value: "confirm_yes" }, { label: "No, Edit Details", value: "confirm_no" }],
     );
   }
@@ -834,14 +892,14 @@ export default function AicyroChatbot() {
 
       submitLead({ ...data, booking_status: "Meeting Booked", requested_action: "Meeting Booked", generated_subject: emailSubject, generated_body: emailBody, conversation_ended_at: new Date().toISOString() });
       setIsProcessing(false);
-      addBotMessage(`✅ Contact Confirmed!\n\nYour demo is officially booked for ${timeText}. We have securely saved your details and sent a calendar invite to ${data.email || "your email"}.`, [{ label: "Close Chat", value: "close" }], true);
+      addBotMessage(`✅ Contact Confirmed! | Your demo is officially booked for ${timeText}. We have securely saved your details and sent a calendar invite to ${data.email || "your email"}.`, [{ label: "Close Chat", value: "close" }], true);
     
     } catch (dbError) {
       // Only throw a fatal Booking Error if the actual database submission fails
       uiLogger.error("booking_lifecycle", "booking_failed_fatal", { error: dbError, context: { session_id: firebaseDbId, target_time: timeText }});
       
       setIsProcessing(false);
-      addBotMessage(`⚠️ Booking Error\n\nSorry, I couldn't secure that calendar slot due to a network error. Please try selecting a different time or contact us directly.`, [], true);
+      addBotMessage(`⚠️ Booking Error | Sorry, I couldn't secure that calendar slot due to a network error. Please try selecting a different time or contact us directly.`, [], true);
       setStep(STEPS.AI_CHAT_MODE); 
     }
   }
@@ -946,7 +1004,7 @@ export default function AicyroChatbot() {
               setLeadData(finalLeadData); triggerConfirmation(finalLeadData);
             } else if (updatedLeadData.preferred_date && !updatedLeadData.preferred_time) {
               setLeadData({ ...updatedLeadData, selected_date: updatedLeadData.preferred_date }); setStep(STEPS.SELECT_TIME);
-              addBotMessage(`Great, ${updatedLeadData.preferred_date}. What time works for you?`, generateTimeSlots().map((t) => ({ label: t, value: `time_${t}` })));
+              addBotMessage(`Great, ${updatedLeadData.preferred_date}. | What time works for you?`, generateTimeSlots().map((t) => ({ label: t, value: `time_${t}` })));
             } else {
               setStep(STEPS.SELECT_DATE); addBotMessage("Please select a date for your meeting:", getNextWeekdays().map((d) => ({ label: d, value: `date_${d}` })));
             }
@@ -974,7 +1032,7 @@ export default function AicyroChatbot() {
       case STEPS.SELECT_DATE:
         if (value.startsWith("date_")) {
           const chosenDate = value.replace("date_", ""); setLeadData((d) => ({ ...d, selected_date: chosenDate })); setStep(STEPS.SELECT_TIME);
-          addBotMessage(`Great, ${chosenDate}. What time works for you?`, generateTimeSlots().map((t) => ({ label: t, value: `time_${t}` })));
+          addBotMessage(`Great, ${chosenDate}. | What time works for you?`, generateTimeSlots().map((t) => ({ label: t, value: `time_${t}` })));
         }
         break;
       case STEPS.SELECT_TIME:
@@ -987,7 +1045,7 @@ export default function AicyroChatbot() {
         break;
       case STEPS.CONFIRM_BOOKING:
         if (value === "confirm_yes") { setStep(STEPS.FINAL_CTA); setIsProcessing(true); generateAndSendWebhook({ ...leadData, requested_action: "Meeting Booked" }, leadData.display_time); } 
-        else if (value === "confirm_no") { setStep(STEPS.AI_CHAT_MODE); addBotMessage("No problem. Just tell me what needs to be changed (e.g., 'Change my email to xyz@test.com')."); }
+        else if (value === "confirm_no") { setStep(STEPS.AI_CHAT_MODE); addBotMessage("No problem. | Just tell me what needs to be changed (e.g., 'Change my email to xyz@test.com')."); }
         break;
       case STEPS.FINAL_CTA:
         if (value === "close") handleCloseChat(); break;
@@ -997,11 +1055,11 @@ export default function AicyroChatbot() {
 
   function showMiniDemo(businessType) {
     const demo = INDUSTRY_DEMOS[businessType] || INDUSTRY_DEMOS["Other"];
-    addBotMessage(`Here's how it works! Imagine a visitor comes to your site and says: '${demo.scenario}' Aicyro checks urgency, captures their info instantly, and pushes them to call or book 24/7.`, []);
+    addBotMessage(`Here's how it works! | Imagine a visitor comes to your site and says: '${demo.scenario}' | Aicyro checks urgency, captures their info instantly, and pushes them to call or book 24/7.`, []);
     setTimeout(() => {
       setMessages((prev) => [...prev, { role: "bot", type: "demo_card", demo, id: Date.now() + Math.random(), instant: true, spoken: true }]);
       setTimeout(() => {
-        setStep(STEPS.SELECT_DATE); addBotMessage("Pretty cool, right? Let's get a free demo booked so you can see it in action on your own site. What day works best?", getNextWeekdays().map((d) => ({ label: d, value: `date_${d}` })));
+        setStep(STEPS.SELECT_DATE); addBotMessage("Pretty cool, right? | Let's get a free demo booked so you can see it in action on your own site. | What day works best?", getNextWeekdays().map((d) => ({ label: d, value: `date_${d}` })));
       }, 1500);
     }, 1500);
   }
@@ -1280,7 +1338,7 @@ export default function AicyroChatbot() {
                             onClick={(e) => { e.stopPropagation(); setShowImagePicker(false); fileGalleryInputRef.current?.click(); }}
                             className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--background)] rounded-xl transition-colors text-left w-full"
                           >
-                            <span>🖼️</span> Upload from Gallery
+                            <span>🖼️️</span> Upload from Gallery
                           </div>
                         </div>
                       )}
