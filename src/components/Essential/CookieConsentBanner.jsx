@@ -146,26 +146,8 @@ export default function CookieConsentBanner() {
 
       // 🛑 If they are an Admin on the dashboard, FORCE them into the Admin role
       // This ensures if they previously got tracked as a normal visitor, they are instantly upgraded to an Admin
-      // and their active time is synced.
       if (isDashboard) {
         handleDecision("accepted", true);
-        
-        // 🔄 Realtime Admin Heartbeat: Continuously ping Firebase every 30 seconds
-        // so the Admin's own card permanently says "Just now" while they are watching the dashboard!
-        adminHeartbeat = setInterval(async () => {
-          const anonId = getOrCreateAnonId();
-          if (anonId && db) {
-            try {
-              const { ref, update } = await import("firebase/database");
-              await update(ref(db, `user_cookies/${anonId}`), {
-                updatedAt: new Date().toISOString()
-              });
-            } catch (e) {
-              // ignore network errors
-            }
-          }
-        }, 30000);
-
         return; 
       }
 
@@ -188,35 +170,10 @@ export default function CookieConsentBanner() {
     // Cleanup function
     return () => {
       document.body.style.overflow = "auto";
-      if (adminHeartbeat) clearInterval(adminHeartbeat);
     };
   }, [router.pathname]);
 
-  // Visitor Active Time Heartbeat
-  useEffect(() => {
-    const currentPath = typeof window !== "undefined" ? window.location.pathname.replace(/\/+/g, "/") : "";
-    if (currentPath === "/lg" || currentPath.startsWith("/lg/")) return;
-    if (currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/")) return;
 
-    const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
-    if (!existingConsent || showBanner) return; // Only heartbeat if they've accepted and banner is closed
-
-    const visitorHeartbeat = setInterval(async () => {
-      const anonId = getOrCreateAnonId();
-      if (anonId && db) {
-        try {
-          const { ref, update } = await import("firebase/database");
-          await update(ref(db, `user_cookies/${anonId}`), {
-            updatedAt: new Date().toISOString()
-          });
-        } catch (e) {
-          // ignore network errors safely
-        }
-      }
-    }, 30000); // Ping every 30s to keep them "Just Now" on the dashboard
-
-    return () => clearInterval(visitorHeartbeat);
-  }, [router.pathname, showBanner]);
 
   function closeBanner() {
     document.body.style.overflow = "auto";
