@@ -24,7 +24,6 @@ export default async function handler(req, res) {
     // 2. Weaponize Transparent Proxy Leaks & Browser Extension Mismatches
     let hasProxyHeaders = false;
     let trueLeakedIp = null;
-    let extensionMismatchType = null;
     
     // Heuristic A: x-forwarded-for mismatch
     let xForwardedFor = req.headers['x-forwarded-for'] || '';
@@ -33,39 +32,10 @@ export default async function handler(req, res) {
       if (firstForwardedIp !== edgeIp && firstForwardedIp !== '127.0.0.1' && firstForwardedIp !== '::1') {
         hasProxyHeaders = true;
         trueLeakedIp = firstForwardedIp;
-        extensionMismatchType = "Transparent Proxy Leak";
         console.log(`[check-network] TRANSPARENT PROXY LEAK DETECTED! VPN Edge IP: ${edgeIp}, Leaked True IP: ${trueLeakedIp}`);
       }
     }
 
-    // Heuristic B: Browser vs Server Mismatch (The ultimate extension catcher)
-    // If the browser fetched a public IP (clientIp) that DOES NOT match our server's edgeIp,
-    // it mathematically proves an extension is proxying external domains but bypassing our domain!
-    if (clientIp && clientIp !== edgeIp && clientIp !== '127.0.0.1' && clientIp !== '::1' && edgeIp !== '127.0.0.1') {
-      const isClientIpv6 = clientIp.includes(':');
-      const isEdgeIpv6 = edgeIp.includes(':');
-      
-      if (isClientIpv6 !== isEdgeIpv6) {
-        console.log(`[check-network] Bypassing extension mismatch due to Dual-Stack: Browser is ${isClientIpv6 ? 'IPv6' : 'IPv4'}, Server is ${isEdgeIpv6 ? 'IPv6' : 'IPv4'}.`);
-      } else if (!isClientIpv6 && !isEdgeIpv6) {
-        // Both are IPv4. Check for Carrier-Grade NAT (CGNAT) false positive.
-        // If they share the same /16 subnet (e.g. 154.192.x.x), it's the same ISP.
-        const clientParts = clientIp.split('.');
-        const edgeParts = edgeIp.split('.');
-        
-        if (clientParts.length === 4 && edgeParts.length === 4 && clientParts[0] === edgeParts[0] && clientParts[1] === edgeParts[1]) {
-          console.log(`[check-network] Bypassing extension mismatch due to CGNAT Anomaly (Same /16 Subnet): ${clientIp} vs ${edgeIp}`);
-        } else {
-          hasProxyHeaders = true;
-          extensionMismatchType = "Browser VPN Extension";
-          console.log(`[check-network] EXTENSION MISMATCH DETECTED! Browser sees: ${clientIp}, Server sees: ${edgeIp}`);
-        }
-      } else {
-        // Both are IPv6 and don't match
-        hasProxyHeaders = true;
-        extensionMismatchType = "Browser VPN Extension";
-        console.log(`[check-network] EXTENSION MISMATCH DETECTED! Browser sees: ${clientIp}, Server sees: ${edgeIp}`);
-      }
     }
 
     console.log(`[check-network] Edge IP: ${edgeIp} (local: ${isLocalHttpIp}), WebRTC TRUE IP: ${webrtcIp || "null"}, Client IP: ${clientIp || "null"}`);
@@ -136,10 +106,6 @@ export default async function handler(req, res) {
     // Pass webrtcIp as-is. The engine compares it against the HTTP IP.
     // If they differ, the HTTP IP is the VPN exit node and the WebRTC IP is the real IP.
     const vpnData = await getDetailedVpnStatus(ip, ipTimezone, 15000, logger, clientTimezone, hasProxyHeaders, webrtcIp, ipOrg, visitorId, deviceTelemetry);
-
-    if (extensionMismatchType && vpnData.isVpn) {
-      vpnData.vpnType = extensionMismatchType;
-    }
 
     return res.status(200).json({
       network: vpnData,
