@@ -116,7 +116,7 @@ export default function CookieConsentBanner() {
   const router = useRouter();
 
   useEffect(() => {
-    const currentPath = router.pathname ? router.pathname.replace(/\/+/g, "/") : "";
+    const currentPath = typeof window !== "undefined" ? window.location.pathname.replace(/\/+/g, "/") : "";
     const isDashboard = currentPath === "/lg" || currentPath.startsWith("/lg/");
     const isPulse = currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/");
 
@@ -194,7 +194,7 @@ export default function CookieConsentBanner() {
 
   // Visitor Active Time Heartbeat
   useEffect(() => {
-    const currentPath = router.pathname ? router.pathname.replace(/\/+/g, "/") : "";
+    const currentPath = typeof window !== "undefined" ? window.location.pathname.replace(/\/+/g, "/") : "";
     if (currentPath === "/lg" || currentPath.startsWith("/lg/")) return;
     if (currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/")) return;
 
