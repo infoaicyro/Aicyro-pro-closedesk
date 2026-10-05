@@ -192,6 +192,32 @@ export default function CookieConsentBanner() {
     };
   }, [router.pathname]);
 
+  // Visitor Active Time Heartbeat
+  useEffect(() => {
+    const currentPath = router.pathname ? router.pathname.replace(/\/+/g, "/") : "";
+    if (currentPath === "/lg" || currentPath.startsWith("/lg/")) return;
+    if (currentPath === "/pulse" || currentPath.startsWith("/pulse/")) return;
+
+    const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
+    if (!existingConsent || showBanner) return; // Only heartbeat if they've accepted and banner is closed
+
+    const visitorHeartbeat = setInterval(async () => {
+      const anonId = getOrCreateAnonId();
+      if (anonId && db) {
+        try {
+          const { ref, update } = await import("firebase/database");
+          await update(ref(db, `user_cookies/${anonId}`), {
+            updatedAt: new Date().toISOString()
+          });
+        } catch (e) {
+          // ignore network errors safely
+        }
+      }
+    }, 30000); // Ping every 30s to keep them "Just Now" on the dashboard
+
+    return () => clearInterval(visitorHeartbeat);
+  }, [router.pathname, showBanner]);
+
   function closeBanner() {
     document.body.style.overflow = "auto";
     setShowBanner(false);
