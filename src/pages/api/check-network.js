@@ -11,35 +11,45 @@ export default async function handler(req, res) {
   try {
     const { clientTimezone, webrtcIp, visitorId, deviceTelemetry, clientIp } = req.body;
 
-    // 1. Backend IP Extraction
-    let httpIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.connection?.remoteAddress || '';
-    if (httpIp && httpIp.includes(',')) {
-      httpIp = httpIp.split(',')[0].trim();
+    // 1. Backend IP Extraction (Netlify Edge Priority)
+    // Extract the strict edge connection IP first. This is the server actually connecting to Netlify (i.e. the VPN node)
+    let edgeIp = req.headers['x-nf-client-connection-ip'] || req.headers['x-real-ip'] || req.connection?.remoteAddress || '';
+    if (edgeIp && edgeIp.includes(',')) {
+      edgeIp = edgeIp.split(',')[0].trim();
     }
-    if (!httpIp || httpIp === '::1') httpIp = '127.0.0.1';
+    if (!edgeIp || edgeIp === '::1') edgeIp = '127.0.0.1';
 
-    const isLocalHttpIp = httpIp === "127.0.0.1" || httpIp === "::1" || httpIp.startsWith("192.168.") || httpIp.startsWith("10.");
+    const isLocalHttpIp = edgeIp === "127.0.0.1" || edgeIp === "::1" || edgeIp.startsWith("192.168.") || edgeIp.startsWith("10.");
 
-    console.log(`[check-network] HTTP IP: ${httpIp} (local: ${isLocalHttpIp}), WebRTC TRUE IP: ${webrtcIp || "null"}, Client IP: ${clientIp || "null"}`);
+    // 2. Weaponize Transparent Proxy Leaks
+    // Free VPN extensions leak the true user IP into x-forwarded-for. If it doesn't match the edge connecting IP, we've caught a proxy!
+    let xForwardedFor = req.headers['x-forwarded-for'] || '';
+    let hasProxyHeaders = false;
+    let trueLeakedIp = null;
+    
+    if (xForwardedFor) {
+      const firstForwardedIp = xForwardedFor.split(',')[0].trim();
+      if (firstForwardedIp !== edgeIp && firstForwardedIp !== '127.0.0.1' && firstForwardedIp !== '::1') {
+        hasProxyHeaders = true;
+        trueLeakedIp = firstForwardedIp;
+        console.log(`[check-network] TRANSPARENT PROXY LEAK DETECTED! VPN Edge IP: ${edgeIp}, Leaked True IP: ${trueLeakedIp}`);
+      }
+    }
 
-    // 2. Localhost Bypass:
+    console.log(`[check-network] Edge IP: ${edgeIp} (local: ${isLocalHttpIp}), WebRTC TRUE IP: ${webrtcIp || "null"}, Client IP: ${clientIp || "null"}`);
+
+    // 3. Localhost Bypass:
     if (isLocalHttpIp) {
       console.log(`[check-network] Localhost → EXTENSION_BYPASSED. Browser VPN extensions cannot be detected against localhost.`);
       return res.status(200).json({
         network: { isVpn: null, vpnType: "Extension Bypassed", timezoneMismatch: false, isSuspicious: null, apiFailed: false, bypassed: true },
-        ipData: { ip: httpIp, city: "Local", region: "Local", country: "Local", timezone: clientTimezone || "UTC", lat: null, lng: null }
+        ipData: { ip: edgeIp, city: "Local", region: "Local", country: "Local", timezone: clientTimezone || "UTC", lat: null, lng: null }
       });
     }
 
-    // IMPORTANT: Browser extensions (like Touch VPN) often only proxy IPv4.
-    // If the server domain has an IPv6 (like Netlify), the extension bypasses it and we see the true IPv6.
-    // However, the client fetched api.ipify.org (IPv4) through the proxy, so `clientIp` holds the VPN IP!
-    // We prioritize `clientIp` as the analysis target.
-    const ip = clientIp || httpIp;
-
-    // HTTP proxy header scanning deleted to avoid CGNAT false positives.
-    // Relying strictly on WebRTC, Timezone, and Datacenter profiling.
-    let hasProxyHeaders = false;
+    // 4. Analysis Target
+    // IMPORTANT: The primary analysis target MUST be the server's edge IP. Never overwrite with clientIp!
+    const ip = edgeIp;
 
     // 4. Extract Geographic Data (Vercel Native vs Fallback)
     let ipTimezone = "Unknown";
