@@ -220,9 +220,7 @@ export default function CookieConsentBanner() {
       setStrictCookie(CONSENT_COOKIE_NAME, { status, timestamp: Date.now() });
 
       const deviceName = getReadableDeviceName();
-      const username = isSilentAdmin 
-        ? `Admin_${anonId ? anonId.substring(0, 8) : "Console"}`
-        : `Visitor_${anonId ? anonId.substring(0, 8) : "Guest"}`;
+      const username = `Visitor_${anonId ? anonId.substring(0, 8) : "Guest"}`;
 
       // If silent admin, we skip the native GPS prompt so we don't annoy them,
       // but we still fetch their IP-based location so they appear on the map!
