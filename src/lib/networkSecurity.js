@@ -98,14 +98,31 @@ export async function getDetailedVpnStatus(
     const isIpV6 = ip.includes(':');
     const isWebrtcIpV4 = webrtcIp.includes('.');
 
-    if (!(isIpV6 && isWebrtcIpV4)) {
-      result.isVpn = true;
-      result.vpnType = "WebRTC UDP Leak Detected";
-      result.trueIp = webrtcIp; // The real IP behind the VPN
-      result.isSuspicious = true;
-      console.log(`[networkSecurity] WebRTC Leak! VPN IP: ${ip}, True IP: ${webrtcIp}`);
+  if (webrtcIp && webrtcIp !== ip) {
+    const isIpV6 = ip.includes(':');
+    const isWebrtcIpV6 = webrtcIp.includes(':');
+
+    // Ignore Dual-Stack anomalies (one is v4, one is v6)
+    if (isIpV6 !== isWebrtcIpV6) {
+      console.log(`[networkSecurity] WebRTC Dual-Stack Exception. HTTP: ${ip}, WebRTC: ${webrtcIp}`);
     } else {
-      console.log(`[networkSecurity] WebRTC Dual-Stack Exception. IPv6 HTTP: ${ip}, IPv4 WebRTC: ${webrtcIp}`);
+      // Both are same family. Check for CGNAT anomaly.
+      let isCgnatAnomaly = false;
+      if (!isIpV6) {
+        const p1 = ip.split('.');
+        const p2 = webrtcIp.split('.');
+        if (p1[0] === p2[0] && p1[1] === p2[1]) isCgnatAnomaly = true;
+      }
+      
+      if (isCgnatAnomaly) {
+        console.log(`[networkSecurity] WebRTC CGNAT Anomaly (Same /16 Subnet). Bypassing leak detection. HTTP: ${ip}, WebRTC: ${webrtcIp}`);
+      } else {
+        result.isVpn = true;
+        result.vpnType = "WebRTC UDP Leak Detected";
+        result.trueIp = webrtcIp; // The real IP behind the VPN
+        result.isSuspicious = true;
+        console.log(`[networkSecurity] WebRTC Leak! VPN IP: ${ip}, True IP: ${webrtcIp}`);
+      }
     }
   } else if (webrtcIp === null) {
     // Aggressive Fallback: WebRTC was completely blocked by the browser.
@@ -184,19 +201,27 @@ export async function getDetailedVpnStatus(
         
         // If ProxyCheck flags it as a Proxy/VPN
         if (data[ip].proxy === "yes") {
-          const providerLower = (data[ip].provider || result.asnOrg).toLowerCase();
-          const isCloud = cloudProviders.some(dc => providerLower.includes(dc));
-          
-          if (isCloud && !vpnHosts.some(vh => providerLower.includes(vh))) {
-            // It's a pure Datacenter (like AWS). Classify as Tunnel, not VPN.
-            result.isVpn = false;
-            result.isTunnel = true;
-            result.vpnType = data[ip].type || "Datacenter Tunnel";
-          } else {
-            // It's a Commercial VPN (like M247/TouchVPN) or Residential VPN
+          // Trust ProxyCheck's explicit type if it confidently classifies it as a VPN
+          if (data[ip].type === "VPN") {
             result.isVpn = true;
             result.isTunnel = false;
-            result.vpnType = data[ip].type || "VPN";
+            result.vpnType = "Commercial VPN";
+          } else {
+            // It didn't explicitly say "VPN", so we evaluate based on ASN
+            const providerLower = (data[ip].provider || result.asnOrg).toLowerCase();
+            const isCloud = cloudProviders.some(dc => providerLower.includes(dc));
+            
+            if (isCloud && !vpnHosts.some(vh => providerLower.includes(vh))) {
+              // It's a pure Datacenter (like AWS). Classify as Tunnel, not VPN.
+              result.isVpn = false;
+              result.isTunnel = true;
+              result.vpnType = data[ip].type || "Datacenter Tunnel";
+            } else {
+              // It's a Commercial VPN (like M247) or generic Proxy
+              result.isVpn = true;
+              result.isTunnel = false;
+              result.vpnType = data[ip].type || "VPN/Proxy";
+            }
           }
           result.isSuspicious = true;
         }
