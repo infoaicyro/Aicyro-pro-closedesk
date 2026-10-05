@@ -1018,8 +1018,7 @@ export default function CookieDataDisplay() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {displayCookies.map((cookie) => {
-            const isJustNow =
-              now - new Date(cookie.updatedAt).getTime() < 60000;
+            const isJustNow = now - new Date(cookie.updatedAt).getTime() < 65000;
             const consentAccepted = cookie.consentStatus === "accepted";
             const isSelected = selectedCookies.includes(cookie.id);
 
@@ -1076,7 +1075,7 @@ export default function CookieDataDisplay() {
                           d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
                       </svg>
-                      {getRelativeTime(cookie.createdAt || cookie.updatedAt, now)}
+                      {isJustNow ? "Just now" : getRelativeTime(cookie.updatedAt, now)}
                     </span>
 
                     {viewMode === "archived" && (
