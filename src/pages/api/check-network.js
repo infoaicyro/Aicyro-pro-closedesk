@@ -107,6 +107,36 @@ export default async function handler(req, res) {
     // If they differ, the HTTP IP is the VPN exit node and the WebRTC IP is the real IP.
     const vpnData = await getDetailedVpnStatus(ip, ipTimezone, 15000, logger, clientTimezone, hasProxyHeaders, webrtcIp, ipOrg, visitorId, deviceTelemetry);
 
+    // Heuristic B: Safely Handle Dual-Stack & CGNAT Mismatches
+    if (clientIp && edgeIp && clientIp !== edgeIp && clientIp !== '127.0.0.1' && clientIp !== '::1' && edgeIp !== '127.0.0.1') {
+      const isClientIPv4 = clientIp.includes('.');
+      const isEdgeIPv4 = edgeIp.includes('.');
+      const isClientIPv6 = clientIp.includes(':');
+      const isEdgeIPv6 = edgeIp.includes(':');
+
+      // Only flag if they belong to the same protocol family but differ in value
+      if ((isClientIPv4 && isEdgeIPv4) || (isClientIPv6 && isEdgeIPv6)) {
+        // CGNAT Safeguard: Nayatel and other CGNAT ISPs route traffic through different IPs in the same /16 block
+        let isCgnat = false;
+        if (isClientIPv4 && isEdgeIPv4) {
+          const p1 = clientIp.split('.');
+          const p2 = edgeIp.split('.');
+          if (p1[0] === p2[0] && p1[1] === p2[1]) isCgnat = true;
+        }
+
+        if (isCgnat) {
+          console.log(`[check-network] CGNAT mismatch ignored. Client: ${clientIp}, Edge: ${edgeIp}`);
+        } else {
+          vpnData.isVpn = true;
+          vpnData.vpnType = "Browser VPN Extension";
+          vpnData.isSuspicious = true;
+          console.log(`[check-network] EXTENSION MISMATCH DETECTED! Browser sees: ${clientIp}, Server sees: ${edgeIp}`);
+        }
+      } else {
+        console.log(`[check-network] Dual-Stack mismatch ignored. Client: ${clientIp}, Edge: ${edgeIp}`);
+      }
+    }
+
     return res.status(200).json({
       network: vpnData,
       ipData: {
