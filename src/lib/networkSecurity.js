@@ -202,7 +202,7 @@ export async function getDetailedVpnStatus(
             // It's a pure Datacenter (like AWS). Classify as Tunnel, not VPN.
             result.isVpn = false;
             result.isTunnel = true;
-            result.vpnType = data[ip].type || "Datacenter Tunnel";
+            result.vpnType = "Datacenter Tunnel";
           } else {
             // It's a Commercial VPN (like M247) or generic Proxy
             result.isVpn = true;
