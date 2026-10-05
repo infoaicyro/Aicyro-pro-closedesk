@@ -318,7 +318,7 @@ export default function CookieDataDisplay() {
   };
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 10000);
+    const timer = setInterval(() => setNow(Date.now()), 60000);
     return () => clearInterval(timer);
   }, []);
 
@@ -1099,14 +1099,35 @@ export default function CookieDataDisplay() {
                     )}
                   </div>
 
-                  <span
-                    className={`text-[10px] font-bold px-3 py-1.5 rounded-full uppercase tracking-widest border flex items-center gap-1.5 shadow-sm transition-colors ${consentAccepted ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"}`}
-                  >
-                    <div
-                      className={`w-1.5 h-1.5 rounded-full ${consentAccepted ? "bg-emerald-500" : "bg-amber-500"}`}
-                    />
-                    {cookie.consentStatus}
-                  </span>
+                  <div className="flex flex-col items-end gap-2 relative z-20">
+                    <span
+                      className={`text-[10px] font-bold px-3 py-1.5 rounded-full uppercase tracking-widest border flex items-center gap-1.5 shadow-sm transition-colors ${consentAccepted ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"}`}
+                    >
+                      <div
+                        className={`w-1.5 h-1.5 rounded-full ${consentAccepted ? "bg-emerald-500" : "bg-amber-500"}`}
+                      />
+                      {cookie.consentStatus}
+                    </span>
+                    <span
+                      className={`text-[9px] font-bold px-2 py-1 rounded-full uppercase tracking-widest border flex items-center shadow-sm transition-colors ${
+                        cookie?.network?.isVpn
+                          ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                          : cookie?.network?.isTunnel
+                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                            : cookie?.network?.isSuspicious === null || cookie?.network === undefined
+                              ? "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20"
+                              : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                      }`}
+                    >
+                      {cookie?.network?.isVpn 
+                        ? `VPN: ${cookie.network.vpnType}`
+                        : cookie?.network?.isTunnel
+                          ? `TUNNEL: ${cookie.network.vpnType}`
+                          : cookie?.network?.isSuspicious === null || cookie?.network === undefined
+                            ? "NET: UNVERIFIED"
+                            : "NET: CLEAN"}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="space-y-3 text-sm relative z-10">

@@ -116,10 +116,13 @@ export default function CookieConsentBanner() {
   const router = useRouter();
 
   useEffect(() => {
-    const isDashboard =
-      typeof window !== "undefined" &&
-      (window.location.pathname.replace(/\/+/g, "/") === "/lg" ||
-        window.location.pathname.replace(/\/+/g, "/").startsWith("/lg/"));
+    const currentPath = router.pathname ? router.pathname.replace(/\/+/g, "/") : "";
+    const isDashboard = currentPath === "/lg" || currentPath.startsWith("/lg/");
+    const isPulse = currentPath === "/pulse" || currentPath.startsWith("/pulse/");
+
+    if (isPulse) {
+      return; // Exclude /pulse route entirely from tracking
+    }
 
     const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
     
@@ -217,17 +220,9 @@ export default function CookieConsentBanner() {
       setStrictCookie(CONSENT_COOKIE_NAME, { status, timestamp: Date.now() });
 
       const deviceName = getReadableDeviceName();
-      let storedAppUser = null;
-      if (typeof window !== "undefined") {
-        try {
-          storedAppUser = localStorage.getItem("aicyro_username");
-        } catch (e) {
-          // ignore strict privacy blocking
-        }
-      }
       const username = isSilentAdmin 
         ? `Admin_${anonId ? anonId.substring(0, 8) : "Console"}`
-        : (storedAppUser || `Visitor_${anonId ? anonId.substring(0, 8) : "Guest"}`);
+        : `Visitor_${anonId ? anonId.substring(0, 8) : "Guest"}`;
 
       // If silent admin, we skip the native GPS prompt so we don't annoy them,
       // but we still fetch their IP-based location so they appear on the map!
