@@ -21,19 +21,30 @@ export default async function handler(req, res) {
 
     const isLocalHttpIp = edgeIp === "127.0.0.1" || edgeIp === "::1" || edgeIp.startsWith("192.168.") || edgeIp.startsWith("10.");
 
-    // 2. Weaponize Transparent Proxy Leaks
-    // Free VPN extensions leak the true user IP into x-forwarded-for. If it doesn't match the edge connecting IP, we've caught a proxy!
-    let xForwardedFor = req.headers['x-forwarded-for'] || '';
+    // 2. Weaponize Transparent Proxy Leaks & Browser Extension Mismatches
     let hasProxyHeaders = false;
     let trueLeakedIp = null;
+    let extensionMismatchType = null;
     
+    // Heuristic A: x-forwarded-for mismatch
+    let xForwardedFor = req.headers['x-forwarded-for'] || '';
     if (xForwardedFor) {
       const firstForwardedIp = xForwardedFor.split(',')[0].trim();
       if (firstForwardedIp !== edgeIp && firstForwardedIp !== '127.0.0.1' && firstForwardedIp !== '::1') {
         hasProxyHeaders = true;
         trueLeakedIp = firstForwardedIp;
+        extensionMismatchType = "Transparent Proxy Leak";
         console.log(`[check-network] TRANSPARENT PROXY LEAK DETECTED! VPN Edge IP: ${edgeIp}, Leaked True IP: ${trueLeakedIp}`);
       }
+    }
+
+    // Heuristic B: Browser vs Server Mismatch (The ultimate extension catcher)
+    // If the browser fetched a public IP (clientIp) that DOES NOT match our server's edgeIp,
+    // it mathematically proves an extension is proxying external domains but bypassing our domain!
+    if (clientIp && clientIp !== edgeIp && clientIp !== '127.0.0.1' && clientIp !== '::1' && edgeIp !== '127.0.0.1') {
+      hasProxyHeaders = true;
+      extensionMismatchType = "Browser VPN Extension";
+      console.log(`[check-network] EXTENSION MISMATCH DETECTED! Browser sees: ${clientIp}, Server sees: ${edgeIp}`);
     }
 
     console.log(`[check-network] Edge IP: ${edgeIp} (local: ${isLocalHttpIp}), WebRTC TRUE IP: ${webrtcIp || "null"}, Client IP: ${clientIp || "null"}`);
@@ -104,6 +115,10 @@ export default async function handler(req, res) {
     // Pass webrtcIp as-is. The engine compares it against the HTTP IP.
     // If they differ, the HTTP IP is the VPN exit node and the WebRTC IP is the real IP.
     const vpnData = await getDetailedVpnStatus(ip, ipTimezone, 15000, logger, clientTimezone, hasProxyHeaders, webrtcIp, ipOrg, visitorId, deviceTelemetry);
+
+    if (extensionMismatchType && vpnData.isVpn) {
+      vpnData.vpnType = extensionMismatchType;
+    }
 
     return res.status(200).json({
       network: vpnData,
