@@ -169,25 +169,38 @@ export default function CookieConsentBanner() {
     };
   }, [router.pathname]);
 
-  // Visitor Active Time Heartbeat
+  // Smart Visitor Activity Tracker (Performance & Tab Sleep Fix)
   useEffect(() => {
     const currentPath = typeof window !== "undefined" ? window.location.pathname.replace(/\/+/g, "/") : "";
     if (currentPath === "/lg" || currentPath.startsWith("/lg/")) return;
     if (currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/")) return;
 
-    const visitorHeartbeat = setInterval(async () => {
+    const pingActivity = async () => {
+      // Only ping Firebase if the user is actively looking at this tab
+      if (document.visibilityState !== "visible") return;
+      
       const anonId = getOrCreateAnonId();
       if (anonId && db) {
         try {
           const { ref, update } = await import("firebase/database");
           await update(ref(db, `user_cookies/${anonId}`), {
-            updatedAt: new Date().toISOString()
+            lastActiveAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString() // Kept for dashboard sorting compatibility
           });
         } catch (e) {}
       }
-    }, 30000);
+    };
 
-    return () => clearInterval(visitorHeartbeat);
+    // Ping every 60s ONLY if they are active on the tab
+    const visitorHeartbeat = setInterval(pingActivity, 60000);
+    
+    // Also ping immediately when they switch back to this tab
+    document.addEventListener("visibilitychange", pingActivity);
+
+    return () => {
+      clearInterval(visitorHeartbeat);
+      document.removeEventListener("visibilitychange", pingActivity);
+    };
   }, []);
 
 
@@ -221,6 +234,33 @@ export default function CookieConsentBanner() {
 
       const deviceName = getReadableDeviceName();
       const username = `Visitor_${anonId ? anonId.substring(0, 8) : "Guest"}`;
+
+      // --- STAGE 1: IMMEDIATE CAPTURE ---
+      // Save instantly to guarantee we don't lose the visitor if they close the tab during VPN scan
+      if (anonId && db) {
+        try {
+          const initialPayload = {
+            username,
+            deviceName,
+            anonId,
+            consentStatus: status,
+            ipAddress: "Scanning...",
+            ipLocation: { city: "Scanning..." },
+            network: { isSuspicious: null },
+            language: typeof window !== "undefined" ? navigator.language : "unknown",
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            createdAt: new Date().toISOString(),
+            lastActiveAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            rawUserAgent: typeof window !== "undefined" ? navigator.userAgent : "unknown",
+          };
+          const { ref, update } = await import("firebase/database");
+          // Use update so we don't overwrite createdAt if it already exists (e.g. from pending to accepted)
+          update(ref(db, `user_cookies/${anonId}`), initialPayload).catch(() => {});
+        } catch (e) {}
+      }
+
+      // --- STAGE 2: HEAVY NETWORK & LOCATION APIs ---
 
       // If silent admin, we skip the native GPS prompt so we don't annoy them,
       // but we still fetch their IP-based location so they appear on the map!
@@ -332,30 +372,27 @@ export default function CookieConsentBanner() {
         txLogger.error("network_request", "server_network_check_failed", { error: err.message });
       }
 
-      const payload = {
-        username,
-        deviceName,
-        anonId: anonId || "unknown",
-        consentStatus: status,
-        ipAddress: ipData.ip,
-        ipLocation: ipData,
-        network: vpnData,
-        language: typeof window !== "undefined" ? navigator.language : "unknown",
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-        updatedAt: new Date().toISOString(),
-        rawUserAgent:
-          typeof window !== "undefined" ? navigator.userAgent : "unknown",
-        location: locationData,
-        deviceTelemetry: deviceTelemetry
-      };
-
+      // --- STAGE 2 UPDATE ---
       try {
         if (!db) {
           txLogger.warn("database", "firebase_uninitialized");
         } else if (anonId) {
+          const { ref, update } = await import("firebase/database");
           const userCookieRef = ref(db, `user_cookies/${anonId}`);
+          
+          const finalUpdate = {
+            consentStatus: status, // Update just in case it changed during scan
+            ipAddress: ipData.ip,
+            ipLocation: ipData,
+            network: vpnData,
+            location: locationData,
+            deviceTelemetry: deviceTelemetry,
+            lastActiveAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+
           // Fire-and-forget to prevent UI blocking
-          set(userCookieRef, payload).catch((error) => {
+          update(userCookieRef, finalUpdate).catch((error) => {
             txLogger.error("database", "consent_save_failed", { error });
           });
 
