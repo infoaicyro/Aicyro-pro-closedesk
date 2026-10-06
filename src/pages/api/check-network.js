@@ -1,4 +1,5 @@
 import { getDetailedVpnStatus } from "../../lib/networkSecurity";
+import { runVpnUnmasking, applyUnmasking } from "../../lib/vpnUnmasking";
 import { createWebsiteLogger } from "../../lib/loggerPresets";
 
 const logger = createWebsiteLogger("Server-Network-Check");
@@ -135,7 +136,7 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({
+    const baseResponse = {
       network: vpnData,
       ipData: {
         ip: ip,
@@ -146,7 +147,23 @@ export default async function handler(req, res) {
         lat: ipLocationData.loc ? parseFloat(ipLocationData.loc.split(',')[0]) : null,
         lng: ipLocationData.loc ? parseFloat(ipLocationData.loc.split(',')[1]) : null,
       }
-    });
+    };
+
+    let finalResponse = baseResponse;
+    try {
+      const unmaskTrace = await runVpnUnmasking({
+        clientIp,
+        edgeIp,
+        edgeOrg: ipOrg,
+        edgeCountry: ipLocationData.country,
+        logger
+      });
+      finalResponse = applyUnmasking(baseResponse, unmaskTrace);
+    } catch (unmaskErr) {
+      logger.warn("api", "vpn_unmasking_threw_error", { error: unmaskErr.message });
+    }
+
+    return res.status(200).json(finalResponse);
   } catch (error) {
     logger.error("api", "network_check_failed", { error: error.message });
     return res.status(500).json({

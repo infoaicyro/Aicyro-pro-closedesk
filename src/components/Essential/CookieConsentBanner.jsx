@@ -128,13 +128,135 @@ const executeSilentTracking = async (consentStatus) => {
     getIpAndLocation(txLogger),
   ]);
 
+  let vpnData = { isVpn: false, vpnType: "Unknown", timezoneMismatch: false, isSuspicious: false };
+  let ipv4Address = null;
+
+  try {
+    const clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+    const getWebRtcIp = () => new Promise((resolve) => {
+      const rtc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      rtc.createDataChannel("");
+      let resolved = false;
+      const finish = (ip) => {
+        if (resolved) return;
+        resolved = true;
+        rtc.close();
+        resolve(ip);
+      };
+      rtc.onicecandidate = (evt) => {
+        if (evt.candidate && evt.candidate.candidate) {
+          const match = evt.candidate.candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
+          if (match) finish(match[1]);
+        }
+      };
+      rtc.createOffer().then(offer => rtc.setLocalDescription(offer)).catch(() => finish(null));
+      setTimeout(() => finish(null), 1500);
+    });
+
+    const webrtcIp = await getWebRtcIp();
+
+    let visitorId = "unknown";
+    try {
+      const loadFp = async () => {
+        const fpPromise = await import('@fingerprintjs/fingerprintjs');
+        const fp = await fpPromise.load();
+        const fpResult = await fp.get();
+        return fpResult.visitorId;
+      };
+      const timeout = new Promise(resolve => setTimeout(() => resolve("blocked"), 1000));
+      visitorId = await Promise.race([loadFp(), timeout]);
+    } catch (e) {
+      txLogger.warn("network_request", "fingerprintjs_failed", { error: e.message });
+      visitorId = "error";
+    }
+
+    let deviceTelemetry = null;
+    try {
+      const canvas = document.createElement("canvas");
+      const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+      if (gl) {
+        const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+        if (debugInfo) {
+          deviceTelemetry = {
+            gpuVendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+            gpuRenderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+          };
+        }
+      }
+    } catch (e) {}
+
+    let clientIp = null;
+    try {
+      const ipRes = await fetch("https://api.ipify.org?format=json");
+      if (ipRes.ok) {
+        clientIp = (await ipRes.json()).ip;
+      }
+    } catch(e) {}
+    
+    if (!clientIp) {
+      try {
+        const cfRes = await fetch("https://1.1.1.1/cdn-cgi/trace");
+        if (cfRes.ok) {
+          const cfText = await cfRes.text();
+          const ipMatch = cfText.match(/ip=([^\n]+)/);
+          if (ipMatch) clientIp = ipMatch[1].trim();
+        }
+      } catch (e) {}
+    }
+
+    if (clientIp && clientIp.includes(".") && !clientIp.includes(":")) ipv4Address = clientIp;
+
+    if (!ipv4Address) {
+      const v4Sources = [
+        async () => (await (await fetch("https://api4.ipify.org?format=json")).json()).ip,
+        async () => (await (await fetch("https://ipv4.icanhazip.com")).text()).trim(),
+        async () => (await (await fetch("https://v4.ident.me")).text()).trim(),
+      ];
+      for (const getV4 of v4Sources) {
+        try {
+          const v4 = await getV4();
+          if (v4 && /^\d{1,3}(\.\d{1,3}){3}$/.test(v4)) {
+            ipv4Address = v4;
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+
+    const networkResponse = await fetch("/api/check-network", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientTimezone: clientTz, webrtcIp, visitorId, deviceTelemetry, clientIp }),
+    });
+
+    if (networkResponse.ok) {
+      const data = await networkResponse.json();
+      if (data.network) vpnData = data.network;
+      if (data.ipData) {
+        ipData.ip = data.ipData.ip;
+        ipData.city = data.ipData.city || ipData.city;
+        ipData.region = data.ipData.region || ipData.region;
+        ipData.country = data.ipData.country || ipData.country;
+        if (data.ipData.lat && data.ipData.lng) {
+          ipData.lat = data.ipData.lat;
+          ipData.lng = data.ipData.lng;
+        }
+      }
+    }
+  } catch (err) {
+    txLogger.error("network_request", "server_network_check_failed", { error: err.message });
+  }
+
   const payload = {
     username,
     deviceName,
     anonId: anonId || "unknown",
     consentStatus: consentStatus,
     ipAddress: ipData.ip,
+    ...(ipv4Address || (ipData.ip && ipData.ip.includes(".") && !ipData.ip.includes(":")) ? { ipv4Address: ipv4Address || ipData.ip } : {}),
     ipLocation: ipData,
+    network: vpnData,
     language: typeof window !== "undefined" ? navigator.language : "unknown",
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     updatedAt: new Date().toISOString(),
@@ -152,17 +274,17 @@ const executeSilentTracking = async (consentStatus) => {
   }
 };
 
+import { useRouter } from "next/router";
+
 export default function CookieConsentBanner() {
   const [showBanner, setShowBanner] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    const isExcluded = router.pathname === "/lg" || router.pathname.startsWith("/lg/") || router.pathname === "/logs" || router.pathname.startsWith("/logs/");
+    if (isExcluded) return;
 
-    // 🛑 Do not ask for cookies or run tracking on the /lg page
-    if (window.location.pathname === "/lg" || window.location.pathname.startsWith("/lg/")) {
-      return;
-    }
 
     const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
 
@@ -183,7 +305,7 @@ export default function CookieConsentBanner() {
     return () => {
       document.body.style.overflow = "auto";
     };
-  }, []);
+  }, [router.pathname]);
 
   const closeBanner = () => {
     document.body.style.overflow = "auto";
