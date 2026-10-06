@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { db } from "../../lib/firebase"; // Adjust path to your firebase config
-import { ref, onValue, update, remove } from "firebase/database";
+import { ref, onValue, update, remove, get } from "firebase/database"; // Added 'get'
 
 // Helper function to format timestamps into "5m ago", "1h ago", etc.
 const formatTimeAgo = (timestamp) => {
@@ -19,6 +19,43 @@ export default function LiveNotifications({ onNavigate }) {
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
+
+  // --- 30-DAY AUTO CLEANUP LOGIC ---
+  // This runs silently in the background once when the component loads
+  useEffect(() => {
+    const cleanupArchivedNotifications = async () => {
+      try {
+        const archiveRef = ref(db, "archived_notifications");
+        const snapshot = await get(archiveRef);
+        
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          const now = Date.now();
+          const updates = {};
+          let hasDeletions = false;
+
+          // Find any archived notifications where 30 days have passed
+          Object.keys(data).forEach((key) => {
+            if (data[key].expiresAt && data[key].expiresAt < now) {
+              updates[`archived_notifications/${key}`] = null;
+              hasDeletions = true;
+            }
+          });
+
+          // Delete them permanently
+          if (hasDeletions) {
+            await update(ref(db), updates);
+            console.log("Cleaned up expired archived notifications.");
+          }
+        }
+      } catch (error) {
+        console.error("Error cleaning up archive:", error);
+      }
+    };
+
+    cleanupArchivedNotifications();
+  }, []);
+
 
   // --- FETCH LIVE NOTIFICATIONS FROM FIREBASE ---
   useEffect(() => {
@@ -82,9 +119,9 @@ export default function LiveNotifications({ onNavigate }) {
     }
   };
 
-  // --- REMOVE NOTIFICATION LOGIC ---
+  // --- REMOVE SINGLE NOTIFICATION LOGIC ---
   const handleRemoveNotification = async (e, id) => {
-    e.stopPropagation(); // Prevents triggering the 'mark as read' click event
+    e.stopPropagation(); 
     try {
       await remove(ref(db, `notifications/${id}`));
     } catch (error) {
@@ -92,11 +129,34 @@ export default function LiveNotifications({ onNavigate }) {
     }
   };
 
+  // --- ARCHIVE WITH 30-DAY EXPIRATION LOGIC ---
   const handleRemoveAllNotifications = async () => {
+    if (notifications.length === 0) return;
+
     try {
-      await remove(ref(db, "notifications"));
+      const updates = {};
+      const THIRTY_DAYS_IN_MS = 30 * 24 * 60 * 60 * 1000;
+      const archiveExpiry = Date.now() + THIRTY_DAYS_IN_MS;
+
+      // Move all current notifications to archive and remove from active
+      notifications.forEach((notif) => {
+        const notifData = { 
+          ...notif, 
+          archivedAt: Date.now(),
+          expiresAt: archiveExpiry // Stamp it with the exact time 30 days from now
+        };
+        
+        delete notifData.id; // Clean up the injected ID before saving to DB
+
+        updates[`archived_notifications/${notif.id}`] = notifData;
+        updates[`notifications/${notif.id}`] = null;
+      });
+
+      // Perform the atomic update to move them securely
+      await update(ref(db), updates);
+
     } catch (error) {
-      console.error("Error clearing all notifications:", error);
+      console.error("Error archiving all notifications:", error);
     }
   };
 
@@ -223,7 +283,7 @@ export default function LiveNotifications({ onNavigate }) {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth="1.5"
-                      d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+                      d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2-2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
                     />
                   </svg>
                 </div>
