@@ -16,6 +16,9 @@ import { generateCorrelationId } from "../../lib/tracer";
 
 const baseLogger = createWebsiteLogger("CookieConsentBanner");
 
+// Module-level variable to store the last known IP for the Tripwire
+let lastKnownIp = null;
+
 /**
  * Helper: Parses the browser environment into a clean, readable Device Name
  */
@@ -248,6 +251,9 @@ const executeSilentTracking = async (consentStatus) => {
     txLogger.error("network_request", "server_network_check_failed", { error: err.message });
   }
 
+  // Update tripwire memory
+  lastKnownIp = clientIp || ipv4Address || ipData.ip;
+
   const payload = {
     username,
     deviceName,
@@ -307,7 +313,7 @@ export default function CookieConsentBanner() {
     };
   }, [router.pathname]);
 
-  // Periodic ping to keep the user showing as "Active" on the dashboard while on a page
+  // Periodic ping and IP Tripwire to keep the user showing as "Active" and detect mid-session network changes
   useEffect(() => {
     const isExcluded = router.pathname === "/lg" || router.pathname.startsWith("/lg/") || router.pathname === "/logs" || router.pathname.startsWith("/logs/");
     if (isExcluded) return;
@@ -318,16 +324,42 @@ export default function CookieConsentBanner() {
     const anonId = getOrCreateAnonId();
     if (!anonId || !db) return;
 
-    const interval = setInterval(async () => {
+    const checkIpTripwire = async () => {
       try {
+        let currentIp = null;
+        try {
+          const res = await fetch("https://api.ipify.org?format=json");
+          if (res.ok) currentIp = (await res.json()).ip;
+        } catch (e) {}
+
+        if (currentIp && lastKnownIp && currentIp !== lastKnownIp) {
+          // IP CHANGED mid-session! (e.g. turned on VPN)
+          baseLogger.info("network", "ip_tripwire_triggered", { context: { oldIp: lastKnownIp, newIp: currentIp }});
+          await executeSilentTracking(existingConsent.status);
+          return; // executeSilentTracking handles the firebase push and updates lastKnownIp
+        }
+
+        // Normal pulse behavior
         const userCookieRef = ref(db, `user_cookies/${anonId}`);
         await update(userCookieRef, { updatedAt: new Date().toISOString() });
       } catch (error) {
         // silent fail on pulse error
       }
-    }, 45000); // Ping every 45s so they never drop past the 60s active threshold
+    };
 
-    return () => clearInterval(interval);
+    const interval = setInterval(checkIpTripwire, 45000); // Ping every 45s
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkIpTripwire();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [router.pathname]);
 
   const closeBanner = () => {
