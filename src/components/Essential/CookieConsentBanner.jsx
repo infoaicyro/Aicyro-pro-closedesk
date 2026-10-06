@@ -1,7 +1,7 @@
 // src/components/Essential/CookieConsentBanner.jsx
 
 import React, { useState, useEffect } from "react";
-import { ref, set } from "firebase/database";
+import { ref, set, update } from "firebase/database";
 import { db } from "../../lib/firebase";
 import {
   setStrictCookie,
@@ -305,6 +305,29 @@ export default function CookieConsentBanner() {
     return () => {
       document.body.style.overflow = "auto";
     };
+  }, [router.pathname]);
+
+  // Periodic ping to keep the user showing as "Active" on the dashboard while on a page
+  useEffect(() => {
+    const isExcluded = router.pathname === "/lg" || router.pathname.startsWith("/lg/") || router.pathname === "/logs" || router.pathname.startsWith("/logs/");
+    if (isExcluded) return;
+
+    const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
+    if (!existingConsent || existingConsent.status !== "accepted") return;
+
+    const anonId = getOrCreateAnonId();
+    if (!anonId || !db) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const userCookieRef = ref(db, `user_cookies/${anonId}`);
+        await update(userCookieRef, { updatedAt: new Date().toISOString() });
+      } catch (error) {
+        // silent fail on pulse error
+      }
+    }, 45000); // Ping every 45s so they never drop past the 60s active threshold
+
+    return () => clearInterval(interval);
   }, [router.pathname]);
 
   const closeBanner = () => {
