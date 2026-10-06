@@ -1,7 +1,7 @@
 // src/components/Essential/CookieConsentBanner.jsx
 
-import React, { useState, useEffect } from "react";
-import { ref, set } from "firebase/database";
+import React, { useState, useEffect, useRef } from "react";
+import { ref, set, update } from "firebase/database";
 import { db } from "../../lib/firebase";
 import {
   setStrictCookie,
@@ -114,7 +114,7 @@ const getUserLocation = (txLogger = baseLogger) => {
 /**
  * Helper: Silent tracker that runs regardless of whether the banner is open or closed
  */
-const executeSilentTracking = async (consentStatus) => {
+const executeSilentTracking = async (consentStatus, trackingRefs = null) => {
   const txId = generateCorrelationId();
   const txLogger = baseLogger.child({ correlation: { correlation_id: txId } });
   
@@ -128,13 +128,146 @@ const executeSilentTracking = async (consentStatus) => {
     getIpAndLocation(txLogger),
   ]);
 
+  let vpnData = { isVpn: false, vpnType: "Unknown", timezoneMismatch: false, isSuspicious: false };
+  let ipv4Address = null;
+  let clientIp = null;
+  let visitorId = "unknown";
+
+  try {
+    const clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+    const getWebRtcIp = () => new Promise((resolve) => {
+      const rtc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      rtc.createDataChannel("");
+      let resolved = false;
+      const finish = (ip) => {
+        if (resolved) return;
+        resolved = true;
+        rtc.close();
+        resolve(ip);
+      };
+      rtc.onicecandidate = (evt) => {
+        if (evt.candidate && evt.candidate.candidate) {
+          const match = evt.candidate.candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3})/);
+          if (match) finish(match[1]);
+        }
+      };
+      rtc.createOffer().then(offer => rtc.setLocalDescription(offer)).catch(() => finish(null));
+      setTimeout(() => finish(null), 1500);
+    });
+
+    const webrtcIp = await getWebRtcIp();
+
+    try {
+      const loadFp = async () => {
+        const fpPromise = await import('@fingerprintjs/fingerprintjs');
+        const fp = await fpPromise.load();
+        const fpResult = await fp.get();
+        return fpResult.visitorId;
+      };
+      const timeout = new Promise(resolve => setTimeout(() => resolve("blocked"), 1000));
+      visitorId = await Promise.race([loadFp(), timeout]);
+    } catch (e) {
+      txLogger.warn("network_request", "fingerprintjs_failed", { error: e.message });
+      visitorId = "error";
+    }
+
+    let deviceTelemetry = null;
+    try {
+      const canvas = document.createElement("canvas");
+      const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+      if (gl) {
+        const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+        if (debugInfo) {
+          deviceTelemetry = {
+            gpuVendor: gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL),
+            gpuRenderer: gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+          };
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const ipRes = await fetch("https://api.ipify.org?format=json");
+      if (ipRes.ok) {
+        clientIp = (await ipRes.json()).ip;
+      }
+    } catch(e) {}
+    
+    if (!clientIp) {
+      try {
+        const cfRes = await fetch("https://1.1.1.1/cdn-cgi/trace");
+        if (cfRes.ok) {
+          const cfText = await cfRes.text();
+          const ipMatch = cfText.match(/ip=([^\n]+)/);
+          if (ipMatch) clientIp = ipMatch[1].trim();
+        }
+      } catch (e) {}
+    }
+
+    if (clientIp && clientIp.includes(".") && !clientIp.includes(":")) ipv4Address = clientIp;
+
+    if (!ipv4Address) {
+      const v4Sources = [
+        async () => (await (await fetch("https://api4.ipify.org?format=json")).json()).ip,
+        async () => (await (await fetch("https://ipv4.icanhazip.com")).text()).trim(),
+        async () => (await (await fetch("https://v4.ident.me")).text()).trim(),
+      ];
+      for (const getV4 of v4Sources) {
+        try {
+          const v4 = await getV4();
+          if (v4 && /^\d{1,3}(\.\d{1,3}){3}$/.test(v4)) {
+            ipv4Address = v4;
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+
+    const networkResponse = await fetch("/api/check-network", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientTimezone: clientTz, webrtcIp, visitorId, deviceTelemetry, clientIp }),
+    });
+
+    if (networkResponse.ok) {
+      const data = await networkResponse.json();
+      if (data.network) vpnData = data.network;
+      if (data.ipData) {
+        ipData.ip = data.ipData.ip;
+        ipData.city = data.ipData.city || ipData.city;
+        ipData.region = data.ipData.region || ipData.region;
+        ipData.country = data.ipData.country || ipData.country;
+        if (data.ipData.lat && data.ipData.lng) {
+          ipData.lat = data.ipData.lat;
+          ipData.lng = data.ipData.lng;
+        }
+      }
+    }
+  } catch (err) {
+    txLogger.error("network_request", "server_network_check_failed", { error: err.message });
+  }
+
+  // Payload Protection: Never push to Firebase if critical data is missing
+  if (!clientIp || !visitorId || visitorId === "unknown" || visitorId === "error" || visitorId === "blocked") {
+    txLogger.warn("tracking_aborted", "missing_critical_data", { clientIp, visitorId });
+    return;
+  }
+
+  // Update tripwire memory
+  if (trackingRefs && trackingRefs.lastKnownIpRef) {
+    trackingRefs.lastKnownIpRef.current = clientIp || ipv4Address || ipData.ip;
+  }
+
   const payload = {
     username,
     deviceName,
     anonId: anonId || "unknown",
     consentStatus: consentStatus,
     ipAddress: ipData.ip,
+    ...(ipv4Address || (ipData.ip && ipData.ip.includes(".") && !ipData.ip.includes(":")) ? { ipv4Address: ipv4Address || ipData.ip } : {}),
     ipLocation: ipData,
+    network: vpnData,
     language: typeof window !== "undefined" ? navigator.language : "unknown",
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     updatedAt: new Date().toISOString(),
@@ -152,23 +285,28 @@ const executeSilentTracking = async (consentStatus) => {
   }
 };
 
+import { useRouter } from "next/router";
+
 export default function CookieConsentBanner() {
   const [showBanner, setShowBanner] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const router = useRouter();
+
+  const lastKnownIpRef = useRef(null);
+  const isInitialTrackCompleteRef = useRef(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    const isExcluded = router.pathname === "/lg" || router.pathname.startsWith("/lg/") || router.pathname === "/logs" || router.pathname.startsWith("/logs/");
+    if (isExcluded) return;
 
-    // 🛑 Do not ask for cookies or run tracking on the /lg page
-    if (window.location.pathname === "/lg" || window.location.pathname.startsWith("/lg/")) {
-      return;
-    }
 
     const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
 
     // ONLY hide the banner if the user previously explicitly "accepted"
     if (existingConsent && existingConsent.status === "accepted") {
-      executeSilentTracking(existingConsent.status);
+      executeSilentTracking(existingConsent.status, { lastKnownIpRef, isInitialTrackCompleteRef }).then(() => {
+        isInitialTrackCompleteRef.current = true;
+      });
     } else {
       // If no cookie exists, OR if they previously rejected, show the banner
       setShowBanner(true);
@@ -183,7 +321,59 @@ export default function CookieConsentBanner() {
     return () => {
       document.body.style.overflow = "auto";
     };
-  }, []);
+  }, [router.pathname]);
+
+  // Periodic ping and IP Tripwire to keep the user showing as "Active" and detect mid-session network changes
+  useEffect(() => {
+    const isExcluded = router.pathname === "/lg" || router.pathname.startsWith("/lg/") || router.pathname === "/logs" || router.pathname.startsWith("/logs/");
+    if (isExcluded) return;
+
+    const existingConsent = getStrictCookie(CONSENT_COOKIE_NAME);
+    if (!existingConsent || existingConsent.status !== "accepted") return;
+
+    const anonId = getOrCreateAnonId();
+    if (!anonId || !db) return;
+
+    const checkIpTripwire = async () => {
+      if (!isInitialTrackCompleteRef.current) return;
+      
+      try {
+        let currentIp = null;
+        try {
+          const res = await fetch("https://api.ipify.org?format=json");
+          if (res.ok) currentIp = (await res.json()).ip;
+        } catch (e) {}
+
+        const lastKnownIp = lastKnownIpRef.current;
+        if (currentIp && lastKnownIp && currentIp !== lastKnownIp) {
+          // IP CHANGED mid-session! (e.g. turned on VPN)
+          baseLogger.info("network", "ip_tripwire_triggered", { context: { oldIp: lastKnownIp, newIp: currentIp }});
+          await executeSilentTracking(existingConsent.status, { lastKnownIpRef, isInitialTrackCompleteRef });
+          return; // executeSilentTracking handles the firebase push and updates lastKnownIpRef
+        }
+
+        // Normal pulse behavior
+        const userCookieRef = ref(db, `user_cookies/${anonId}`);
+        await update(userCookieRef, { updatedAt: new Date().toISOString() });
+      } catch (error) {
+        // silent fail on pulse error
+      }
+    };
+
+    const interval = setInterval(checkIpTripwire, 45000); // Ping every 45s
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkIpTripwire();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [router.pathname]);
 
   const closeBanner = () => {
     document.body.style.overflow = "auto";
@@ -201,11 +391,16 @@ export default function CookieConsentBanner() {
       document.cookie = `${CONSENT_COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
     }
 
-    // Execute the tracking for this specific page view
-    await executeSilentTracking(status);
-
-    setIsSaving(false);
-    closeBanner();
+    try {
+      // Execute the tracking for this specific page view
+      await executeSilentTracking(status, { lastKnownIpRef, isInitialTrackCompleteRef });
+      isInitialTrackCompleteRef.current = true;
+    } catch (error) {
+      baseLogger.error("ui_action", "tracking_crashed", { error: error.message });
+    } finally {
+      setIsSaving(false);
+      closeBanner();
+    }
   };
 
   if (!showBanner) return null;
