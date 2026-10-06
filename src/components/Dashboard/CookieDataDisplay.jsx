@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, memo } from "react";
 import { ref, onValue, remove, update } from "firebase/database";
 import { db } from "../../lib/firebase";
 import {
@@ -8,6 +8,8 @@ import {
   Marker,
   ZoomableGroup,
 } from "react-simple-maps";
+
+import { geoContains } from "d3-geo";
 
 // URL for the TopoJSON map data used to draw the world map
 const geoUrl = "https://unpkg.com/world-atlas@2.0.2/countries-110m.json";
@@ -29,7 +31,7 @@ const getRelativeTime = (timestamp, now) => {
 
 // Helper to calculate and format the exact time left until permanent deletion
 const getArchiveTimeLeft = (archivedAt, now) => {
-  if (!archivedAt) return "Pending 30-day cycle"; // Fallback for data archived before this update
+  if (!archivedAt) return "Pending 30-day cycle";
 
   const expiryTime = new Date(archivedAt).getTime() + THIRTY_DAYS_MS;
   const diffInSeconds = Math.floor((expiryTime - now) / 1000);
@@ -209,6 +211,99 @@ const LocationRenderer = ({ location }) => {
   );
 };
 
+
+// WRAPPED IN memo() TO PREVENT LAG DURING PAN AND ZOOM
+const HeatmapGeographies = memo(({ geographies, mappedCookies, setSelectedRegion }) => {
+  const { countryCounts, maxDeviceCount } = useMemo(() => {
+    const counts = {};
+    let max = 0;
+
+    // 1. Create a quick lookup map for TopoJSON names to speed up string matching
+    const geoNameMap = new Map();
+    geographies.forEach(g => geoNameMap.set(g.properties.name, g));
+
+    // 2. Loop cookies FIRST (much faster than looping geographies first)
+    mappedCookies.forEach((cookie) => {
+      let matchedCountryName = null;
+
+      // FAST PATH: Instant string match (O(1) time complexity)
+      if (cookie.ipLocation?.country && geoNameMap.has(cookie.ipLocation.country)) {
+        matchedCountryName = cookie.ipLocation.country;
+      }
+      // SLOW PATH: Polygon Math fallback (Only runs if string fails)
+      else if (cookie.location?.lng && cookie.location?.lat) {
+        const lng = Number(cookie.location.lng);
+        const lat = Number(cookie.location.lat);
+        
+        if (!isNaN(lng) && !isNaN(lat)) {
+          // .find() stops searching instantly once it finds the matching country
+          const matchedGeo = geographies.find(geo => geoContains(geo, [lng, lat]));
+          if (matchedGeo) {
+            matchedCountryName = matchedGeo.properties.name;
+          }
+        }
+      }
+
+      // Add to tally
+      if (matchedCountryName) {
+        counts[matchedCountryName] = (counts[matchedCountryName] || 0) + 1;
+        if (counts[matchedCountryName] > max) max = counts[matchedCountryName];
+      }
+    });
+
+    return { countryCounts: counts, maxDeviceCount: max };
+  }, [geographies, mappedCookies]);
+
+  // Calculate dynamic opacity
+  const getOpacityForCountry = (countryName) => {
+    const count = countryCounts[countryName] || 0;
+    if (count === 0) return 0.03; // Base opacity for empty countries
+
+    const minOpacity = 0.15;
+    const maxOpacity = 0.85;
+    
+    // Force the country to glow brightly if there is only 1 device on the whole map
+    if (maxDeviceCount <= 1) return maxOpacity; 
+
+    const scaleRange = maxOpacity - minOpacity;
+    const domainRange = maxDeviceCount - 1; 
+    
+    return minOpacity + ((count - 1) / domainRange) * scaleRange;
+  };
+
+  return geographies.map((geo) => {
+    const countryName = geo.properties.name;
+    const deviceCount = countryCounts[countryName] || 0;
+    const dynamicOpacity = getOpacityForCountry(countryName);
+
+    return (
+      <Geography
+        key={geo.rsmKey}
+        geography={geo}
+        onClick={(e) => {
+          e.stopPropagation();
+          setSelectedRegion({ name: countryName, count: deviceCount });
+        }}
+        fill="var(--primary)"
+        fillOpacity={dynamicOpacity}
+        stroke="var(--foreground-muted)"
+        strokeOpacity={0.15}
+        strokeWidth={0.5}
+        style={{
+          default: { outline: "none", transition: "fill-opacity 250ms ease" },
+          hover: {
+            fillOpacity: Math.min(dynamicOpacity + 0.2, 1),
+            outline: "none",
+            cursor: deviceCount > 0 ? "pointer" : "default",
+            transition: "fill-opacity 150ms ease",
+          },
+          pressed: { outline: "none" },
+        }}
+      />
+    );
+  });
+});
+
 export default function CookieDataDisplay() {
   const [cookies, setCookies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -216,6 +311,7 @@ export default function CookieDataDisplay() {
   const [viewMode, setViewMode] = useState("active");
 
   const [selectedCookies, setSelectedCookies] = useState([]);
+  const [selectedRegion, setSelectedRegion] = useState(null);
 
   // Toast State
   const [toast, setToast] = useState({
@@ -286,7 +382,6 @@ export default function CookieDataDisplay() {
     return () => unsubscribe();
   }, []);
 
-  // Helper to show custom toasts
   const showToast = (message, type = "info") => {
     setToast({ visible: true, message, type });
     setTimeout(() => setToast((prev) => ({ ...prev, visible: false })), 4000);
@@ -376,8 +471,6 @@ export default function CookieDataDisplay() {
     }
   };
 
-  // --- Handlers using Custom UI ---
-
   const handleArchiveSelected = () => {
     setConfirmDialog({
       isOpen: true,
@@ -462,6 +555,7 @@ export default function CookieDataDisplay() {
   const handleResetMap = () => {
     setPosition({ coordinates: [0, 20], zoom: 1 });
     setActiveMapMarker(null);
+    setSelectedRegion(null);
   };
 
   const handleMoveEnd = (newPosition) => {
@@ -606,7 +700,10 @@ export default function CookieDataDisplay() {
 
           <div
             className="absolute inset-0 pt-8"
-            onClick={() => setActiveMapMarker(null)}
+            onClick={() => {
+              setActiveMapMarker(null);
+              setSelectedRegion(null);
+            }}
           >
             <ComposableMap
               projection="geoMercator"
@@ -620,29 +717,13 @@ export default function CookieDataDisplay() {
                 maxZoom={12}
               >
                 <Geographies geography={geoUrl}>
-                  {({ geographies }) =>
-                    geographies.map((geo) => (
-                      <Geography
-                        key={geo.rsmKey}
-                        geography={geo}
-                        fill="var(--foreground)"
-                        fillOpacity={0.03}
-                        stroke="var(--foreground-muted)"
-                        strokeOpacity={0.15}
-                        strokeWidth={0.5}
-                        style={{
-                          default: { outline: "none", transition: "all 250ms" },
-                          hover: {
-                            fill: "var(--primary)",
-                            fillOpacity: 0.1,
-                            outline: "none",
-                            transition: "all 250ms",
-                          },
-                          pressed: { outline: "none" },
-                        }}
-                      />
-                    ))
-                  }
+                  {({ geographies }) => (
+                    <HeatmapGeographies 
+                      geographies={geographies} 
+                      mappedCookies={mappedCookies}
+                      setSelectedRegion={setSelectedRegion}
+                    />
+                  )}
                 </Geographies>
                 {mappedCookies.map((c) => (
                   <CustomMapMarker
@@ -658,6 +739,18 @@ export default function CookieDataDisplay() {
                 ))}
               </ZoomableGroup>
             </ComposableMap>
+
+            {/* Floating Panel for Region Stats */}
+            {selectedRegion && (
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 bg-[var(--card-bg)]/90 backdrop-blur-md border border-[var(--primary)] px-6 py-3 rounded-2xl shadow-[0_0_15px_var(--primary)] animate-in slide-in-from-top-4 fade-in">
+                <h4 className="text-[var(--foreground)] font-bold text-lg text-center">
+                  {selectedRegion.name}
+                </h4>
+                <p className="text-[var(--primary)] font-mono text-sm text-center mt-1">
+                  {selectedRegion.count} {selectedRegion.count === 1 ? "Device" : "Devices"} Visits
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="absolute bottom-6 right-6 flex items-center bg-[var(--background)]/80 backdrop-blur-md border border-[var(--border-color)] rounded-full z-20 shadow-lg p-1">
