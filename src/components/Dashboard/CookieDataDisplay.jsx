@@ -298,6 +298,22 @@ export default function CookieDataDisplay() {
         }
       } catch(e) {}
 
+      // Dedicated IPv4-only lookup for display (clientIp above may be IPv6 on dual-stack)
+      let ipv4Address = clientIp && clientIp.includes(".") && !clientIp.includes(":") ? clientIp : null;
+      if (!ipv4Address) {
+        const v4Sources = [
+          async () => (await (await fetch("https://api4.ipify.org?format=json")).json()).ip,
+          async () => (await (await fetch("https://ipv4.icanhazip.com")).text()).trim(),
+          async () => (await (await fetch("https://v4.ident.me")).text()).trim(),
+        ];
+        for (const getV4 of v4Sources) {
+          try {
+            const v4 = await getV4();
+            if (v4 && /^\d{1,3}(\.\d{1,3}){3}$/.test(v4)) { ipv4Address = v4; break; }
+          } catch (e) {}
+        }
+      }
+
       // 5. Hit Backend
       const response = await fetch("/api/check-network", {
         method: "POST",
@@ -307,7 +323,7 @@ export default function CookieDataDisplay() {
       
       if (response.ok) {
         const data = await response.json();
-        setScanResult(data);
+        setScanResult({ ...data, ipv4Address });
       } else {
         setScanResult({ error: "API Failed to scan network." });
       }
@@ -660,7 +676,7 @@ export default function CookieDataDisplay() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
                     <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">IP Address</span>
-                    <span className="text-sm font-semibold text-[var(--foreground)] truncate block" title={scanResult.ipData?.ip || "Unknown"}>{scanResult.ipData?.ip || "Unknown"}</span>
+                    <span className="text-sm font-semibold text-[var(--foreground)] truncate block" title={scanResult.ipv4Address || "IPv4 unavailable"}>{scanResult.ipv4Address || (scanResult.ipData?.ip && !scanResult.ipData.ip.includes(":") ? scanResult.ipData.ip : "IPv4 unavailable")}</span>
                   </div>
                   <div className="bg-[var(--background)] p-3 rounded-xl border border-[var(--border-color)]">
                     <span className="text-xs text-[var(--foreground-muted)] block mb-1 uppercase font-bold tracking-wider">Location</span>
