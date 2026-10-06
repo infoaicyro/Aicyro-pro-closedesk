@@ -9,14 +9,12 @@ import {
   ZoomableGroup,
 } from "react-simple-maps";
 
-import { geoContains } from "d3-geo";
+// NEW: Import centroid and bounds helpers
+import { geoContains, geoCentroid, geoBounds } from "d3-geo";
 
-// URL for the TopoJSON map data used to draw the world map
 const geoUrl = "https://unpkg.com/world-atlas@2.0.2/countries-110m.json";
-
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-// Helper to format timestamps dynamically
 const getRelativeTime = (timestamp, now) => {
   const diffInSeconds = Math.floor(
     (now - new Date(timestamp).getTime()) / 1000,
@@ -29,7 +27,6 @@ const getRelativeTime = (timestamp, now) => {
   return new Date(timestamp).toLocaleDateString();
 };
 
-// Helper to calculate and format the exact time left until permanent deletion
 const getArchiveTimeLeft = (archivedAt, now) => {
   if (!archivedAt) return "Pending 30-day cycle";
 
@@ -44,7 +41,6 @@ const getArchiveTimeLeft = (archivedAt, now) => {
   return `${Math.floor(diffInSeconds / 86400)} days left`;
 };
 
-// Helper Component: Map Marker with On-Click Popup and Zooming Text
 const CustomMapMarker = ({ cookie, zoom, now, isActive, onClick }) => {
   const [placeName, setPlaceName] = useState("");
   const isJustNow = now - new Date(cookie.updatedAt).getTime() < 60000;
@@ -211,32 +207,24 @@ const LocationRenderer = ({ location }) => {
   );
 };
 
-
-// WRAPPED IN memo() TO PREVENT LAG DURING PAN AND ZOOM
-const HeatmapGeographies = memo(({ geographies, mappedCookies, setSelectedRegion }) => {
+// Heatmap Geographies with onClick passing
+const HeatmapGeographies = memo(({ geographies, mappedCookies, onCountryClick }) => {
   const { countryCounts, maxDeviceCount } = useMemo(() => {
     const counts = {};
     let max = 0;
 
-    // 1. Create a quick lookup map for TopoJSON names to speed up string matching
     const geoNameMap = new Map();
     geographies.forEach(g => geoNameMap.set(g.properties.name, g));
 
-    // 2. Loop cookies FIRST (much faster than looping geographies first)
     mappedCookies.forEach((cookie) => {
       let matchedCountryName = null;
 
-      // FAST PATH: Instant string match (O(1) time complexity)
       if (cookie.ipLocation?.country && geoNameMap.has(cookie.ipLocation.country)) {
         matchedCountryName = cookie.ipLocation.country;
-      }
-      // SLOW PATH: Polygon Math fallback (Only runs if string fails)
-      else if (cookie.location?.lng && cookie.location?.lat) {
+      } else if (cookie.location?.lng && cookie.location?.lat) {
         const lng = Number(cookie.location.lng);
         const lat = Number(cookie.location.lat);
-        
         if (!isNaN(lng) && !isNaN(lat)) {
-          // .find() stops searching instantly once it finds the matching country
           const matchedGeo = geographies.find(geo => geoContains(geo, [lng, lat]));
           if (matchedGeo) {
             matchedCountryName = matchedGeo.properties.name;
@@ -244,7 +232,6 @@ const HeatmapGeographies = memo(({ geographies, mappedCookies, setSelectedRegion
         }
       }
 
-      // Add to tally
       if (matchedCountryName) {
         counts[matchedCountryName] = (counts[matchedCountryName] || 0) + 1;
         if (counts[matchedCountryName] > max) max = counts[matchedCountryName];
@@ -254,15 +241,13 @@ const HeatmapGeographies = memo(({ geographies, mappedCookies, setSelectedRegion
     return { countryCounts: counts, maxDeviceCount: max };
   }, [geographies, mappedCookies]);
 
-  // Calculate dynamic opacity
   const getOpacityForCountry = (countryName) => {
     const count = countryCounts[countryName] || 0;
-    if (count === 0) return 0.03; // Base opacity for empty countries
+    if (count === 0) return 0.03; 
 
     const minOpacity = 0.15;
     const maxOpacity = 0.85;
     
-    // Force the country to glow brightly if there is only 1 device on the whole map
     if (maxDeviceCount <= 1) return maxOpacity; 
 
     const scaleRange = maxOpacity - minOpacity;
@@ -282,7 +267,7 @@ const HeatmapGeographies = memo(({ geographies, mappedCookies, setSelectedRegion
         geography={geo}
         onClick={(e) => {
           e.stopPropagation();
-          setSelectedRegion({ name: countryName, count: deviceCount });
+          onCountryClick(geo, countryName, deviceCount);
         }}
         fill="var(--primary)"
         fillOpacity={dynamicOpacity}
@@ -313,14 +298,12 @@ export default function CookieDataDisplay() {
   const [selectedCookies, setSelectedCookies] = useState([]);
   const [selectedRegion, setSelectedRegion] = useState(null);
 
-  // Toast State
   const [toast, setToast] = useState({
     visible: false,
     message: "",
     type: "info",
   });
 
-  // Custom Confirm Modal State
   const [confirmDialog, setConfirmDialog] = useState({
     isOpen: false,
     title: "",
@@ -542,17 +525,19 @@ export default function CookieDataDisplay() {
     });
   };
 
-  const handleZoomIn = () => {
-    if (position.zoom >= 8) return;
-    setPosition((pos) => ({ ...pos, zoom: pos.zoom * 1.5 }));
+  // --- MAP CONTROLS FIXED WITH STOP PROPAGATION ---
+  const handleZoomIn = (e) => {
+    e.stopPropagation();
+    setPosition((pos) => ({ ...pos, zoom: Math.min(pos.zoom * 1.5, 12) }));
   };
 
-  const handleZoomOut = () => {
-    if (position.zoom <= 1) return;
-    setPosition((pos) => ({ ...pos, zoom: pos.zoom / 1.5 }));
+  const handleZoomOut = (e) => {
+    e.stopPropagation();
+    setPosition((pos) => ({ ...pos, zoom: Math.max(pos.zoom / 1.5, 1) }));
   };
 
-  const handleResetMap = () => {
+  const handleResetMap = (e) => {
+    if (e) e.stopPropagation();
     setPosition({ coordinates: [0, 20], zoom: 1 });
     setActiveMapMarker(null);
     setSelectedRegion(null);
@@ -561,6 +546,31 @@ export default function CookieDataDisplay() {
   const handleMoveEnd = (newPosition) => {
     setPosition(newPosition);
   };
+
+  // --- NEW: AUTO ZOOM ON CLICK HANDLER ---
+  const handleCountryClick = (geo, countryName, deviceCount) => {
+    // 1. Show the stats bubble
+    setSelectedRegion({ name: countryName, count: deviceCount });
+
+    // 2. Find geographic center of the clicked country
+    const centroid = geoCentroid(geo);
+    
+    // 3. Find the bounding box to calculate exactly how much to zoom in
+    const bounds = geoBounds(geo);
+    const dx = Math.abs(bounds[1][0] - bounds[0][0]);
+    const dy = Math.abs(bounds[1][1] - bounds[0][1]);
+
+    // 100 divided by width/height gives a perfect framing zoom level
+    let nextZoom = Math.min(10, 100 / Math.max(dx, dy));
+
+    // Fallbacks for massive countries that stretch across the globe and break bounding boxes
+    if (["United States", "Russia", "Canada", "Antarctica"].includes(countryName)) nextZoom = 2;
+    if (["France", "United Kingdom"].includes(countryName)) nextZoom = 4; // Oversea territories
+
+    // 4. Animate to the new zoom and center
+    setPosition({ coordinates: centroid, zoom: nextZoom });
+  };
+
 
   const activeCount = displayCookies.filter(
     (c) => now - new Date(c.updatedAt).getTime() < 60000,
@@ -602,7 +612,6 @@ export default function CookieDataDisplay() {
 
   return (
     <section className="w-full max-w-7xl mx-auto p-6 fade-in">
-      {/* Lively Header */}
       <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
@@ -637,7 +646,6 @@ export default function CookieDataDisplay() {
         </div>
       </div>
 
-      {/* Floating Action Toolbar */}
       {selectedCookies.length > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 sm:gap-3 animate-in slide-in-from-bottom-8 fade-in zoom-in-95 duration-300 bg-[var(--background)]/80 backdrop-blur-xl border border-[var(--border-color)] px-5 py-3 rounded-full shadow-2xl w-max max-w-[95vw] overflow-x-auto">
           <span className="text-sm font-medium text-[var(--foreground-muted)] mr-2 whitespace-nowrap">
@@ -678,7 +686,6 @@ export default function CookieDataDisplay() {
         </div>
       )}
 
-      {/* KPI & Interactive Minimalist Map Section */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
         <div className="lg:col-span-3 theme-glass-card border border-[var(--border-color)] rounded-3xl relative overflow-hidden flex items-center justify-center min-h-[400px] shadow-sm group bg-[var(--card-bg)]">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,var(--primary)_0%,transparent_70%)] opacity-[0.04] pointer-events-none"></div>
@@ -700,10 +707,7 @@ export default function CookieDataDisplay() {
 
           <div
             className="absolute inset-0 pt-8"
-            onClick={() => {
-              setActiveMapMarker(null);
-              setSelectedRegion(null);
-            }}
+            onClick={() => handleResetMap()}
           >
             <ComposableMap
               projection="geoMercator"
@@ -721,7 +725,7 @@ export default function CookieDataDisplay() {
                     <HeatmapGeographies 
                       geographies={geographies} 
                       mappedCookies={mappedCookies}
-                      setSelectedRegion={setSelectedRegion}
+                      onCountryClick={handleCountryClick}
                     />
                   )}
                 </Geographies>
@@ -740,7 +744,6 @@ export default function CookieDataDisplay() {
               </ZoomableGroup>
             </ComposableMap>
 
-            {/* Floating Panel for Region Stats */}
             {selectedRegion && (
               <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 bg-[var(--card-bg)]/90 backdrop-blur-md border border-[var(--primary)] px-6 py-3 rounded-2xl shadow-[0_0_15px_var(--primary)] animate-in slide-in-from-top-4 fade-in">
                 <h4 className="text-[var(--foreground)] font-bold text-lg text-center">
@@ -756,10 +759,10 @@ export default function CookieDataDisplay() {
           <div className="absolute bottom-6 right-6 flex items-center bg-[var(--background)]/80 backdrop-blur-md border border-[var(--border-color)] rounded-full z-20 shadow-lg p-1">
             <button
               onClick={handleZoomIn}
-              className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors"
+              className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors cursor-pointer"
             >
               <svg
-                className="w-4 h-4"
+                className="w-4 h-4 pointer-events-none"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -775,10 +778,10 @@ export default function CookieDataDisplay() {
             <div className="w-[1px] h-4 bg-[var(--border-color)] mx-1"></div>
             <button
               onClick={handleZoomOut}
-              className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors"
+              className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors cursor-pointer"
             >
               <svg
-                className="w-4 h-4"
+                className="w-4 h-4 pointer-events-none"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -794,10 +797,10 @@ export default function CookieDataDisplay() {
             <div className="w-[1px] h-4 bg-[var(--border-color)] mx-1"></div>
             <button
               onClick={handleResetMap}
-              className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors"
+              className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors cursor-pointer"
             >
               <svg
-                className="w-4 h-4"
+                className="w-4 h-4 pointer-events-none"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -813,7 +816,6 @@ export default function CookieDataDisplay() {
           </div>
         </div>
 
-        {/* Stats Column */}
         <div className="flex flex-col gap-4">
           <div className="theme-glass-card p-6 flex flex-col justify-center flex-1 border-l-4 border-l-[var(--foreground-muted)] hover:shadow-lg transition-all shadow-sm">
             <span className="text-[var(--foreground-muted)] text-xs uppercase tracking-wider mb-1 font-mono">
@@ -844,7 +846,6 @@ export default function CookieDataDisplay() {
         </div>
       </div>
 
-      {/* Filter Bar */}
       {cookies.length > 0 && (
         <div className="mb-8 flex flex-wrap items-center gap-4 bg-[var(--card-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] p-4 rounded-2xl shadow-sm">
           <div className="flex items-center gap-2 mr-2">
