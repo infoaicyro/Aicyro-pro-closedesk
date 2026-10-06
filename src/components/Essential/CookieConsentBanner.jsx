@@ -1,6 +1,6 @@
 // src/components/Essential/CookieConsentBanner.jsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { ref, set, update } from "firebase/database";
 import { db } from "../../lib/firebase";
 import {
@@ -15,9 +15,6 @@ import { createWebsiteLogger } from "../../lib/loggerPresets";
 import { generateCorrelationId } from "../../lib/tracer";
 
 const baseLogger = createWebsiteLogger("CookieConsentBanner");
-
-// Module-level variable to store the last known IP for the Tripwire
-let lastKnownIp = null;
 
 /**
  * Helper: Parses the browser environment into a clean, readable Device Name
@@ -117,7 +114,7 @@ const getUserLocation = (txLogger = baseLogger) => {
 /**
  * Helper: Silent tracker that runs regardless of whether the banner is open or closed
  */
-const executeSilentTracking = async (consentStatus) => {
+const executeSilentTracking = async (consentStatus, trackingRefs = null) => {
   const txId = generateCorrelationId();
   const txLogger = baseLogger.child({ correlation: { correlation_id: txId } });
   
@@ -251,8 +248,16 @@ const executeSilentTracking = async (consentStatus) => {
     txLogger.error("network_request", "server_network_check_failed", { error: err.message });
   }
 
+  // Payload Protection: Never push to Firebase if critical data is missing
+  if (!clientIp || !visitorId || visitorId === "unknown" || visitorId === "error") {
+    txLogger.warn("tracking_aborted", "missing_critical_data", { clientIp, visitorId });
+    return;
+  }
+
   // Update tripwire memory
-  lastKnownIp = clientIp || ipv4Address || ipData.ip;
+  if (trackingRefs && trackingRefs.lastKnownIpRef) {
+    trackingRefs.lastKnownIpRef.current = clientIp || ipv4Address || ipData.ip;
+  }
 
   const payload = {
     username,
@@ -287,6 +292,9 @@ export default function CookieConsentBanner() {
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
 
+  const lastKnownIpRef = useRef(null);
+  const isInitialTrackCompleteRef = useRef(false);
+
   useEffect(() => {
     const isExcluded = router.pathname === "/lg" || router.pathname.startsWith("/lg/") || router.pathname === "/logs" || router.pathname.startsWith("/logs/");
     if (isExcluded) return;
@@ -296,7 +304,9 @@ export default function CookieConsentBanner() {
 
     // ONLY hide the banner if the user previously explicitly "accepted"
     if (existingConsent && existingConsent.status === "accepted") {
-      executeSilentTracking(existingConsent.status);
+      executeSilentTracking(existingConsent.status, { lastKnownIpRef, isInitialTrackCompleteRef }).then(() => {
+        isInitialTrackCompleteRef.current = true;
+      });
     } else {
       // If no cookie exists, OR if they previously rejected, show the banner
       setShowBanner(true);
@@ -325,6 +335,8 @@ export default function CookieConsentBanner() {
     if (!anonId || !db) return;
 
     const checkIpTripwire = async () => {
+      if (!isInitialTrackCompleteRef.current) return;
+      
       try {
         let currentIp = null;
         try {
@@ -332,11 +344,12 @@ export default function CookieConsentBanner() {
           if (res.ok) currentIp = (await res.json()).ip;
         } catch (e) {}
 
+        const lastKnownIp = lastKnownIpRef.current;
         if (currentIp && lastKnownIp && currentIp !== lastKnownIp) {
           // IP CHANGED mid-session! (e.g. turned on VPN)
           baseLogger.info("network", "ip_tripwire_triggered", { context: { oldIp: lastKnownIp, newIp: currentIp }});
-          await executeSilentTracking(existingConsent.status);
-          return; // executeSilentTracking handles the firebase push and updates lastKnownIp
+          await executeSilentTracking(existingConsent.status, { lastKnownIpRef, isInitialTrackCompleteRef });
+          return; // executeSilentTracking handles the firebase push and updates lastKnownIpRef
         }
 
         // Normal pulse behavior
@@ -379,7 +392,8 @@ export default function CookieConsentBanner() {
     }
 
     // Execute the tracking for this specific page view
-    await executeSilentTracking(status);
+    await executeSilentTracking(status, { lastKnownIpRef, isInitialTrackCompleteRef });
+    isInitialTrackCompleteRef.current = true;
 
     setIsSaving(false);
     closeBanner();
