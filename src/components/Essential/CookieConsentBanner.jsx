@@ -116,7 +116,7 @@ export default function CookieConsentBanner() {
   const router = useRouter();
 
   useEffect(() => {
-    const currentPath = typeof window !== "undefined" ? window.location.pathname.replace(/\/+/g, "/") : "";
+    const currentPath = router.pathname || "";
     const isDashboard = currentPath === "/lg" || currentPath.startsWith("/lg/");
     const isPulse = currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/");
 
@@ -132,7 +132,8 @@ export default function CookieConsentBanner() {
     const verifyDatabaseRecord = async () => {
       let recordExists = true;
       if (existingConsent) {
-        const anonId = getOrCreateAnonId();
+        const baseAnonId = getOrCreateAnonId();
+        const anonId = baseAnonId ? baseAnonId.replace(/^anon_/, "visitor_") : null;
         if (anonId && db) {
           try {
             const { ref, get } = await import("firebase/database");
@@ -174,11 +175,12 @@ export default function CookieConsentBanner() {
 
   // Smart Visitor Activity Tracker (Performance & Tab Sleep Fix)
   useEffect(() => {
-    const currentPath = typeof window !== "undefined" ? window.location.pathname.replace(/\/+/g, "/") : "";
+    const currentPath = router.pathname || "";
     if (currentPath === "/lg" || currentPath.startsWith("/lg/")) return;
     if (currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/")) return;
 
-    const anonId = getOrCreateAnonId();
+    const baseAnonId = getOrCreateAnonId();
+    const anonId = baseAnonId ? baseAnonId.replace(/^anon_/, "visitor_") : null;
     
     // INSTANTLY reset sessionStartAt when the user refreshes or loads the page
     if (anonId && db) {
@@ -243,7 +245,8 @@ export default function CookieConsentBanner() {
       });
 
       const endTimer = txLogger.startTimer();
-      const anonId = getOrCreateAnonId();
+      const baseAnonId = getOrCreateAnonId();
+      const anonId = baseAnonId ? baseAnonId.replace(/^anon_/, "visitor_") : null;
 
       setStrictCookie(CONSENT_COOKIE_NAME, { status, timestamp: Date.now() });
 

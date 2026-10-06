@@ -367,6 +367,12 @@ export default function CookieDataDisplay() {
     return () => unsubscribe();
   }, []);
 
+  // Memory-safe setInterval state ticker for dynamic "Just Now" relative time updates
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Helper to show custom toasts
   const showToast = (message, type = "info") => {
     setToast({ visible: true, message, type });
