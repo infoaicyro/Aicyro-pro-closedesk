@@ -1254,7 +1254,7 @@ export default function CookieDataDisplay() {
                       IP Address
                     </strong>
                     <span className="text-[var(--foreground-muted)] truncate flex-1">
-                      {cookie.ipAddress || "Unknown"}
+                      {cookie.ipv4Address || (cookie.ipAddress && !cookie.ipAddress.includes(":") ? cookie.ipAddress : "IPv4 unavailable")}
                     </span>
                   </p>
                   <p className="flex items-center gap-3">

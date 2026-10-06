@@ -302,6 +302,7 @@ export default function CookieConsentBanner() {
       let vpnData = { isVpn: false, vpnType: "Unknown", timezoneMismatch: false, isSuspicious: false };
       let ipData = { ip: "unknown", city: "Unknown", region: "Unknown", country: "Unknown", lat: null, lng: null };
       let deviceTelemetry = null;
+      let ipv4Address = null;
       
       try {
         // 1. WebRTC Leak Detection
@@ -392,6 +393,8 @@ export default function CookieConsentBanner() {
           } catch (e) {}
         }
 
+        if (clientIp && clientIp.includes(".") && !clientIp.includes(":")) ipv4Address = clientIp;
+
         const networkResponse = await fetch("/api/check-network", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -417,6 +420,7 @@ export default function CookieConsentBanner() {
           const finalUpdate = {
             consentStatus: status, // Update just in case it changed during scan
             ipAddress: ipData.ip,
+            ...(ipv4Address || (ipData.ip && ipData.ip.includes(".") && !ipData.ip.includes(":")) ? { ipv4Address: ipv4Address || ipData.ip } : {}),
             ipLocation: ipData,
             network: vpnData,
             location: locationData,
