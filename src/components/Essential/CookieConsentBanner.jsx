@@ -130,6 +130,8 @@ const executeSilentTracking = async (consentStatus, trackingRefs = null) => {
 
   let vpnData = { isVpn: false, vpnType: "Unknown", timezoneMismatch: false, isSuspicious: false };
   let ipv4Address = null;
+  let clientIp = null;
+  let visitorId = "unknown";
 
   try {
     const clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -156,7 +158,6 @@ const executeSilentTracking = async (consentStatus, trackingRefs = null) => {
 
     const webrtcIp = await getWebRtcIp();
 
-    let visitorId = "unknown";
     try {
       const loadFp = async () => {
         const fpPromise = await import('@fingerprintjs/fingerprintjs');
@@ -186,7 +187,6 @@ const executeSilentTracking = async (consentStatus, trackingRefs = null) => {
       }
     } catch (e) {}
 
-    let clientIp = null;
     try {
       const ipRes = await fetch("https://api.ipify.org?format=json");
       if (ipRes.ok) {
@@ -249,7 +249,7 @@ const executeSilentTracking = async (consentStatus, trackingRefs = null) => {
   }
 
   // Payload Protection: Never push to Firebase if critical data is missing
-  if (!clientIp || !visitorId || visitorId === "unknown" || visitorId === "error") {
+  if (!clientIp || !visitorId || visitorId === "unknown" || visitorId === "error" || visitorId === "blocked") {
     txLogger.warn("tracking_aborted", "missing_critical_data", { clientIp, visitorId });
     return;
   }
@@ -391,12 +391,16 @@ export default function CookieConsentBanner() {
       document.cookie = `${CONSENT_COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
     }
 
-    // Execute the tracking for this specific page view
-    await executeSilentTracking(status, { lastKnownIpRef, isInitialTrackCompleteRef });
-    isInitialTrackCompleteRef.current = true;
-
-    setIsSaving(false);
-    closeBanner();
+    try {
+      // Execute the tracking for this specific page view
+      await executeSilentTracking(status, { lastKnownIpRef, isInitialTrackCompleteRef });
+      isInitialTrackCompleteRef.current = true;
+    } catch (error) {
+      baseLogger.error("ui_action", "tracking_crashed", { error: error.message });
+    } finally {
+      setIsSaving(false);
+      closeBanner();
+    }
   };
 
   if (!showBanner) return null;
