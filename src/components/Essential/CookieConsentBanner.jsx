@@ -395,6 +395,24 @@ export default function CookieConsentBanner() {
 
         if (clientIp && clientIp.includes(".") && !clientIp.includes(":")) ipv4Address = clientIp;
 
+        // Dedicated IPv4-only lookup (these hosts only have A records, so the browser must use IPv4)
+        if (!ipv4Address) {
+          const v4Sources = [
+            async () => (await (await fetch("https://api4.ipify.org?format=json")).json()).ip,
+            async () => (await (await fetch("https://ipv4.icanhazip.com")).text()).trim(),
+            async () => (await (await fetch("https://v4.ident.me")).text()).trim(),
+          ];
+          for (const getV4 of v4Sources) {
+            try {
+              const v4 = await getV4();
+              if (v4 && /^\d{1,3}(\.\d{1,3}){3}$/.test(v4)) {
+                ipv4Address = v4;
+                break;
+              }
+            } catch (e) {}
+          }
+        }
+
         const networkResponse = await fetch("/api/check-network", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
