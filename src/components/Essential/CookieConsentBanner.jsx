@@ -114,8 +114,10 @@ const getUserLocation = (txLogger = baseLogger) => {
 export default function CookieConsentBanner() {
   const [showBanner, setShowBanner] = useState(false);
   const router = useRouter();
+  const isExcluded = router.pathname.startsWith("/lg") || router.pathname.startsWith("/pulse") || router.pathname.startsWith("/logs");
 
   useEffect(() => {
+    if (isExcluded) return;
     const currentPath = router.pathname || "";
     const isDashboard = currentPath === "/lg" || currentPath.startsWith("/lg/");
     const isPulse = currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/");
@@ -171,10 +173,11 @@ export default function CookieConsentBanner() {
     return () => {
       document.body.style.overflow = "auto";
     };
-  }, [router.pathname]);
+  }, [isExcluded, router.pathname]);
 
   // Smart Visitor Activity Tracker (Performance & Tab Sleep Fix)
   useEffect(() => {
+    if (isExcluded) return;
     const currentPath = router.pathname || "";
     if (currentPath === "/lg" || currentPath.startsWith("/lg/")) return;
     if (currentPath === "/pulse" || currentPath.startsWith("/pulse/") || currentPath === "/logs" || currentPath.startsWith("/logs/")) return;
@@ -218,7 +221,7 @@ export default function CookieConsentBanner() {
       clearInterval(visitorHeartbeat);
       document.removeEventListener("visibilitychange", pingActivity);
     };
-  }, [router.pathname]);
+  }, [isExcluded, router.pathname]);
 
 
 
