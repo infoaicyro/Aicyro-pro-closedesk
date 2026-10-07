@@ -775,20 +775,18 @@ export default function AicyroChatbot() {
   const handleAvatarLeave = () => { setIsHovered(false); };
   const handleAvatarClick = (e) => { e.stopPropagation(); if (avatarEffect) return; setAvatarEffect("animate-avatar-flip"); setSpeechText("Whoa! 🚀"); setTimeout(() => { setAvatarEffect(""); if (isHovered) setSpeechText("Ready for action!"); }, 1000); };
 
-
-  // ==========================================
+// ==========================================
   // 🔥 HUMAN-LIKE MESSAGE CHUNKING SYSTEM
   // ==========================================
   async function addBotMessage(text, buttons = [], isInstant = false) {
     if (!text) return;
     
-
     // Strip out Markdown bolding asterisks just in case the AI sends them
     const cleanText = text.replace(/\*\*/g, "");
-
-    // Split the text by the | delimiter to create chunks
-    const chunks = cleanText.split("|").map(t => t.trim()).filter(Boolean);
-const fullMessageText = chunks.join(" "); // Combine for the TTS reader
+    
+    // BULLETPROOF SPLIT: Split the text by the | delimiter OR by any newlines (\n)
+    const chunks = cleanText.split(/[|\n]+/).map(t => t.trim()).filter(Boolean);
+    const fullMessageText = chunks.join(" "); // Combine for the TTS reader
     
     // If it's an instant message (like loading history or a fallback error), dump them all at once
     if (isInstant) {
@@ -841,7 +839,7 @@ const fullMessageText = chunks.join(" "); // Combine for the TTS reader
   }
   // ==========================================
 
-
+  
   function addUserMessage(text) {
     setMessages((prev) => {
       const cleanedMessages = prev.map((m) => m.role === "bot" && m.buttons?.length > 0 ? { ...m, buttons: m.buttons.filter((b) => !b.value.startsWith("shortcut_")) } : m);
