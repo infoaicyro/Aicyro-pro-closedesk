@@ -782,9 +782,13 @@ export default function AicyroChatbot() {
   async function addBotMessage(text, buttons = [], isInstant = false) {
     if (!text) return;
     
+
+    // Strip out Markdown bolding asterisks just in case the AI sends them
+    const cleanText = text.replace(/\*\*/g, "");
+
     // Split the text by the | delimiter to create chunks
-    const chunks = text.split("|").map(t => t.trim()).filter(Boolean);
-    const fullMessageText = chunks.join(" "); // Combine for the TTS reader
+    const chunks = cleanText.split("|").map(t => t.trim()).filter(Boolean);
+const fullMessageText = chunks.join(" "); // Combine for the TTS reader
     
     // If it's an instant message (like loading history or a fallback error), dump them all at once
     if (isInstant) {
