@@ -118,12 +118,6 @@ export async function getDetailedVpnStatus(
         console.log(`[networkSecurity] WebRTC Leak! VPN IP: ${ip}, True IP: ${webrtcIp}`);
       }
     }
-  } else if (webrtcIp === null) {
-    // Aggressive Fallback: WebRTC was completely blocked by the browser.
-    result.isVpn = true;
-    result.vpnType = "Privacy Shield / VPN Extension";
-    result.isSuspicious = true;
-    console.log(`[networkSecurity] WebRTC Blocked! Flagging as VPN.`);
   }
 
   // 2. Datacenter / ASN Profiling
