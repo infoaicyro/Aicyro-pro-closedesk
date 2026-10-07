@@ -113,7 +113,7 @@ const STEPS = {
   SELECT_DATE: "SELECT_DATE", SELECT_TIME: "SELECT_TIME", CONFIRM_BOOKING: "CONFIRM_BOOKING", FINAL_CTA: "FINAL_CTA",
 };
 
-const TypewriterBubble = ({ msg, onButtonClick, scrollRef, isProcessing, onSpeak, isMuted, agentMode }) => {
+const TypewriterBubble = ({ msg, onButtonClick, scrollRef, isProcessing, onSpeak, isMuted, agentMode, setAnimatingIds }) => {
   const [displayedText, setDisplayedText] = useState(msg.instant ? msg.text : "");
   const [isTypingText, setIsTypingText] = useState(!msg.instant);
   const hasSpoken = useRef(false);
@@ -155,9 +155,12 @@ const TypewriterBubble = ({ msg, onButtonClick, scrollRef, isProcessing, onSpeak
       setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
       return;
     }
+    
     let i = 0;
     setIsTypingText(true);
+    setAnimatingIds?.((prev) => [...prev, msg.id]);
     setDisplayedText("");
+    
     const timer = setInterval(() => {
       setDisplayedText(msg.text.slice(0, i + 1));
       i++;
@@ -165,14 +168,20 @@ const TypewriterBubble = ({ msg, onButtonClick, scrollRef, isProcessing, onSpeak
       if (i >= msg.text.length) {
         clearInterval(timer);
         setIsTypingText(false);
+        setAnimatingIds?.((prev) => prev.filter((id) => id !== msg.id));
+        
         if (!msg.spoken && !isMutedRef.current && onSpeakRef.current && !hasSpoken.current && agentMode === "text") {
           hasSpoken.current = true; onSpeakRef.current(msg.text);
         }
         setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
       }
     }, 15);
-    return () => clearInterval(timer);
-  }, [msg.id, agentMode]);
+    
+    return () => {
+      clearInterval(timer);
+      setAnimatingIds?.((prev) => prev.filter((id) => id !== msg.id));
+    };
+  }, [msg.id, agentMode, msg.text, msg.instant]);
 
   return (
     <div className="flex flex-col gap-1.5 max-w-[85%] self-start animate-acy-fade">
@@ -210,6 +219,7 @@ export default function AicyroChatbot() {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [animatingIds, setAnimatingIds] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [firebaseDbId] = useState(() => `lead_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
   const firebaseDbIdRef = useRef(firebaseDbId);
@@ -1234,7 +1244,7 @@ export default function AicyroChatbot() {
                       );
                     }
                     if (msg.role === "bot") {
-                      return <TypewriterBubble key={msg.id} msg={msg} onButtonClick={handleButtonClick} scrollRef={messagesEndRef} isProcessing={isProcessing} onSpeak={speakText} isMuted={isMuted} agentMode={agentMode} />;
+                      return <TypewriterBubble key={msg.id} msg={msg} onButtonClick={handleButtonClick} scrollRef={messagesEndRef} isProcessing={isProcessing} onSpeak={speakText} isMuted={isMuted} agentMode={agentMode} setAnimatingIds={setAnimatingIds} />;
                     }
                     return (
                       <div key={msg.id} className="flex flex-col gap-1.5 max-w-[85%] self-end animate-acy-fade">
@@ -1350,7 +1360,7 @@ export default function AicyroChatbot() {
 
                     <input
                       ref={inputRef}
-                      disabled={agentMode === "text" && (isProcessing || isUploadingImage)}
+                      disabled={agentMode === "text" && isUploadingImage}
                       onClick={handleInputInteraction}
                       onFocus={handleInputInteraction}
                       className="flex-1 bg-transparent text-[var(--foreground)] text-[14px] outline-none placeholder:text-[var(--foreground-muted)] disabled:opacity-50 py-1.5"
@@ -1359,7 +1369,11 @@ export default function AicyroChatbot() {
                       placeholder={isUploadingImage ? "Uploading & diagnosing..." : isListening ? "Listening..." : "Type, snap photo, or speak..."}
                     />
 
-                    <button type="submit" disabled={!inputValue.trim() || (agentMode === "text" && isProcessing)} className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--primary)] text-white transition-all disabled:opacity-50 disabled:scale-100 hover:scale-105 outline-none">
+                    <button 
+                      type="submit" 
+                      disabled={!inputValue.trim() || (agentMode === "text" && (isProcessing || isTyping || animatingIds.length > 0))} 
+                      className="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--primary)] text-white transition-all disabled:opacity-50 disabled:scale-100 hover:scale-105 outline-none"
+                    >
                       <svg className="w-4 h-4 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" /></svg>
                     </button>
                   </form>
