@@ -10,7 +10,7 @@ import LivePreviewSection from "@/components/Home/OLD/LivePreviewSection";
 import Process from "@/components/Home/OLD/Process";
 import Industries from "@/components/Home/OLD/Industries";
 import Popupform from "@/components/Form/Popupform";
-import PopupModal from "@/components/Form/PopupModel";
+// import PopupModal from "@/components/Form/PopupModel";
 import Navbar from "@/components/Essential/Navbar";
 import Pulse from "@/components/Home/OLD/Pulse";
 import Founding from "@/components/Home/OLD/Founding";
@@ -252,7 +252,7 @@ export default function Home() {
       <main className="relative z-10">
         <Navbar onOpenPopup={() => setIsPopupOpen(true)} />
         {/* <ThemeToggle /> */}
-        <PopupModal />
+        {/* <PopupModal /> */}
 
         {/* Pass the open function as a prop to components that have buttons */}
         <Hero onOpenPopup={() => setIsPopupOpen(true)} />
