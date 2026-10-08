@@ -243,6 +243,7 @@ export default function AicyroChatbot() {
   const fileGalleryInputRef = useRef(null);
   const videoRef = useRef(null);
   const cameraStreamRef = useRef(null);
+  const imagePickerRef = useRef(null); // Ref for closing the picker when clicking outside
   
   const recognitionRef = useRef(null);
   const abortControllerRef = useRef(null);
@@ -254,6 +255,21 @@ export default function AicyroChatbot() {
     if (voiceCallRef.current && voiceCallRef.current.audioEl) voiceCallRef.current.audioEl.muted = isMuted;
     if (isMuted) stopSpeech();
   }, [isMuted]);
+
+  // --- Click Outside to Close Image Picker ---
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (imagePickerRef.current && !imagePickerRef.current.contains(event.target)) {
+        setShowImagePicker(false);
+      }
+    }
+    if (showImagePicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showImagePicker]);
 
   // --- WebRTC Camera Setup for "Take a Photo" ---
   const openWebcam = async () => {
@@ -1327,34 +1343,39 @@ export default function AicyroChatbot() {
 
                   <form className="relative flex items-center gap-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-full pl-3 pr-1.5 py-1.5 focus-within:border-[var(--primary)] transition-all" onSubmit={handleTextInput}>
                     
-                    <button
-                      type="button"
-                      onClick={() => setShowImagePicker(!showImagePicker)}
-                      disabled={isUploadingImage || isProcessing}
-                      className="p-1.5 rounded-full text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--background)] transition-all outline-none relative"
-                      title="Send Photo of the Issue"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
+                    {/* Wrapped the camera button in the imagePickerRef */}
+                    <div ref={imagePickerRef} className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowImagePicker(!showImagePicker)}
+                        disabled={isUploadingImage || isProcessing}
+                        className="p-1.5 rounded-full text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--background)] transition-all outline-none"
+                        title="Send Photo of the Issue"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </button>
+
+                      {/* Moved the popup slightly inside the ref container so it clicks-outside cleanly */}
                       {showImagePicker && (
-                        <div className="absolute bottom-14 left-0 bg-[var(--card-bg)] border border-[var(--border-color)] shadow-2xl rounded-2xl p-2 flex flex-col gap-1 z-50 min-w-[200px] animate-acy-spring origin-bottom-left">
+                        <div className="absolute bottom-12 left-0 bg-[var(--card-bg)] border border-[var(--border-color)] shadow-2xl rounded-2xl p-2 flex flex-col gap-1 z-50 min-w-[200px] animate-acy-spring origin-bottom-left">
                           <div
                             onClick={(e) => { e.stopPropagation(); openWebcam(); }}
-                            className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--background)] rounded-xl transition-colors text-left w-full"
+                            className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--background)] rounded-xl transition-colors text-left w-full cursor-pointer"
                           >
                             <span>📸</span> Take a Photo
                           </div>
                           <div
                             onClick={(e) => { e.stopPropagation(); setShowImagePicker(false); fileGalleryInputRef.current?.click(); }}
-                            className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--background)] rounded-xl transition-colors text-left w-full"
+                            className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--background)] rounded-xl transition-colors text-left w-full cursor-pointer"
                           >
                             <span>🖼</span> Upload from Gallery
                           </div>
                         </div>
                       )}
-                    </button>
+                    </div>
 
                     <button type="button" onClick={toggleListening} className={`p-1.5 rounded-full transition-all outline-none ${isListening ? "bg-red-500 text-white animate-pulse" : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]"}`} title={isListening ? "Stop listening" : "Speak to type"}>
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 016 0v6a3 3 0 01-3 3z" /></svg>
@@ -1392,4 +1413,4 @@ export default function AicyroChatbot() {
       )}
     </div>
   );
-}
+} 
