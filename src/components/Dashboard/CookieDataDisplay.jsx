@@ -1420,9 +1420,9 @@ export default function CookieDataDisplay() {
 
           {/* 5. Replacing ComposableMap with Google Map */}
           <div className="absolute inset-0 z-[10]" onClick={(e) => handleResetMap(e)}>
-            <APIProvider apiKey="YOUR_GOOGLE_MAPS_API_KEY">
+            <APIProvider apiKey="AIzaSyCiHcL_bdWNPJ5vS1YpZ8KkyxoUzVxWF-w">
               <Map
-                mapId="YOUR_MAP_ID" // REQUIRED FOR ADVANCED MARKERS
+                mapId="945614388340984bae02edf5" // REQUIRED FOR ADVANCED MARKERS
                 zoom={mapZoom}
                 center={mapCenter}
                 onCameraChanged={(ev) => {
