@@ -55,10 +55,7 @@ const CustomGoogleMarker = memo(({ cookie, isJustNow, isActive, onMarkerClick })
   return (
     <AdvancedMarker
       position={{ lat: Number(cookie.location.lat), lng: Number(cookie.location.lng) }}
-      onClick={(e) => {
-        e.stop();
-        onMarkerClick(cookie.id);
-      }}
+      onClick={() => onMarkerClick(cookie.id)} // Fixed: Removed e.stop()
       zIndex={isActive ? 100 : isJustNow ? 50 : 1}
     >
       <div className="relative flex flex-col items-center justify-center cursor-pointer select-none">
@@ -77,7 +74,7 @@ const CustomGoogleMarker = memo(({ cookie, isJustNow, isActive, onMarkerClick })
 
         {/* Marker Icon Pin */}
         <div className="relative group/pin transition-transform duration-200 hover:scale-125 z-10">
-          <svg width="24" height="24" viewBox="0 0 24 24" className="drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
+          <svg width="24" height="24" viewBox="0 0 24 24">
             <path
               d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
               fill="var(--primary)"
@@ -107,7 +104,7 @@ const CustomGoogleMarker = memo(({ cookie, isJustNow, isActive, onMarkerClick })
 });
 
 // Country Heatmap using Google Maps GeoJSON Data Layer
-const HeatmapLayer = memo(({ mappedCookies, onCountryClick }) => {
+const HeatmapLayer = memo(({ mappedCookies }) => {
   const map = useMap();
   const geoJsonLoaded = useRef(false);
 
@@ -133,10 +130,8 @@ const HeatmapLayer = memo(({ mappedCookies, onCountryClick }) => {
       map.data.loadGeoJson("https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json");
       geoJsonLoaded.current = true;
 
+      // When a country is clicked, calculate its bounds and auto-zoom the map
       map.data.addListener("click", (event) => {
-        const countryName = event.feature.getProperty("name");
-        onCountryClick(countryName);
-
         const bounds = new window.google.maps.LatLngBounds();
         event.feature.getGeometry().forEachLatLng((latLng) => {
           bounds.extend(latLng);
@@ -166,10 +161,10 @@ const HeatmapLayer = memo(({ mappedCookies, onCountryClick }) => {
         strokeColor: "var(--foreground-muted)",
         strokeOpacity: 0.15,
         strokeWeight: 0.5,
-        cursor: count > 0 ? "pointer" : "default"
+        cursor: count > 0 ? "pointer" : "default" // Shows hand cursor if country has visitors
       };
     });
-  }, [map, countryCounts, maxDeviceCount, onCountryClick]);
+  }, [map, countryCounts, maxDeviceCount]);
 
   return null;
 });
@@ -228,7 +223,6 @@ export default function CookieDataDisplay() {
   const [viewMode, setViewMode] = useState("active");
 
   const [selectedCookies, setSelectedCookies] = useState([]);
-  const [selectedRegion, setSelectedRegion] = useState(null);
 
   const [toast, setToast] = useState({ visible: false, message: "", type: "info" });
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: "", message: "", onConfirm: null, confirmText: "Confirm", confirmColor: "bg-[var(--primary)]" });
@@ -416,13 +410,7 @@ export default function CookieDataDisplay() {
     setMapZoom(3);
     setMapCenter({ lat: 20, lng: 0 });
     setActiveMapMarker(null);
-    setSelectedRegion(null);
   };
-
-  const handleCountryClick = useCallback((countryName) => {
-    const count = mappedCookies.filter((c) => c.ipLocation?.country === countryName).length;
-    setSelectedRegion({ name: countryName, count: count });
-  }, [mappedCookies]);
 
   const handleMarkerClick = useCallback((id) => {
     setActiveMapMarker((prev) => (prev === id ? null : id));
@@ -581,7 +569,6 @@ export default function CookieDataDisplay() {
             </p>
           </div>
 
-          {/* Map Container without the resetting outer click bug */}
           <div className="absolute inset-0 z-[10]">
           <APIProvider apiKey="AIzaSyCiHcL_bdWNPJ5vS1YpZ8KkyxoUzVxWF-w">
               <Map
@@ -596,7 +583,7 @@ export default function CookieDataDisplay() {
                 disableDefaultUI={true}
                 gestureHandling="greedy"
               >
-                <HeatmapLayer mappedCookies={mappedCookies} onCountryClick={handleCountryClick} />
+                <HeatmapLayer mappedCookies={mappedCookies} />
 
                 {mappedCookies.map((c) => {
                   const isJustNow = now - new Date(c.updatedAt).getTime() < 60000;
@@ -612,17 +599,6 @@ export default function CookieDataDisplay() {
                 })}
               </Map>
             </APIProvider>
-
-            {selectedRegion && (
-              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-40 bg-[var(--card-bg)]/90 backdrop-blur-md border border-[var(--primary)] px-6 py-3 rounded-2xl shadow-[0_0_15px_var(--primary)] animate-in slide-in-from-top-4 fade-in">
-                <h4 className="text-[var(--foreground)] font-bold text-lg text-center">
-                  {selectedRegion.name}
-                </h4>
-                <p className="text-[var(--primary)] font-mono text-sm text-center mt-1">
-                  {selectedRegion.count} {selectedRegion.count === 1 ? "Device" : "Devices"} Visits
-                </p>
-              </div>
-            )}
           </div>
 
           {/* Map Controls */}
