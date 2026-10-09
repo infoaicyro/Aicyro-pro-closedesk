@@ -55,7 +55,7 @@ const CustomGoogleMarker = memo(({ cookie, isJustNow, isActive, onMarkerClick })
   return (
     <AdvancedMarker
       position={{ lat: Number(cookie.location.lat), lng: Number(cookie.location.lng) }}
-      onClick={() => onMarkerClick(cookie.id)} // Fixed: Removed e.stop()
+      onClick={() => onMarkerClick(cookie.id)}
       zIndex={isActive ? 100 : isJustNow ? 50 : 1}
     >
       <div className="relative flex flex-col items-center justify-center cursor-pointer select-none">
@@ -161,7 +161,7 @@ const HeatmapLayer = memo(({ mappedCookies }) => {
         strokeColor: "var(--foreground-muted)",
         strokeOpacity: 0.15,
         strokeWeight: 0.5,
-        cursor: count > 0 ? "pointer" : "default" // Shows hand cursor if country has visitors
+        cursor: count > 0 ? "pointer" : "default" 
       };
     });
   }, [map, countryCounts, maxDeviceCount]);
@@ -394,7 +394,6 @@ export default function CookieDataDisplay() {
     });
   };
 
-  // Google Maps Manual Zoom & Reset Handlers
   const handleZoomIn = (e) => {
     e.stopPropagation();
     setMapZoom((prev) => Math.min(prev + 1, 15));
@@ -570,9 +569,9 @@ export default function CookieDataDisplay() {
           </div>
 
           <div className="absolute inset-0 z-[10]">
-          <APIProvider apiKey="AIzaSyCiHcL_bdWNPJ5vS1YpZ8KkyxoUzVxWF-w">
+            <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}>
               <Map
-                mapId="945614388340984bae02edf5" // REQUIRED FOR ADVANCED MARKERS
+                mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
                 zoom={mapZoom}
                 center={mapCenter}
                 onCameraChanged={(ev) => {
@@ -821,4 +820,4 @@ export default function CookieDataDisplay() {
       )}
     </section>
   );
-}
+}s
