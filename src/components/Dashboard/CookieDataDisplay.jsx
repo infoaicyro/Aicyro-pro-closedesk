@@ -822,4 +822,4 @@ export default function CookieDataDisplay() {
       )}
     </section>
   );
-}s
+}

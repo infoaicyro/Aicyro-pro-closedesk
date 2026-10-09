@@ -4,7 +4,6 @@
 import { useState, useEffect, useRef } from "react";
 import { db } from "../lib/firebase";
 import { ref, onValue, get } from "firebase/database";
-import dynamic from 'next/dynamic'; // Added for Google Maps SSR fix
 
 import LoginScreen from "../components/Dashboard/LoginScreen";
 import SuperAdminLoginScreen from "../components/Dashboard/superadmin/superadminlogin";
@@ -24,31 +23,11 @@ import NotificationSettings from "../components/Dashboard/Settings/notification-
 import Apearance from "../components/Dashboard/Settings/apearance";
 
 import LiveNotifications from "../components/Dashboard/LiveNotifications";
+import CookieDataDisplay from "../components/Dashboard/CookieDataDisplay";
 
 // Implement the new Website Logger
 import { createWebsiteLogger } from "../lib/loggerPresets";
 const logger = createWebsiteLogger("DashboardLayout");
-
-// =========================================================================
-// --- DYNAMIC IMPORT FIX FOR GOOGLE MAPS BUILD ERROR ---
-// Next.js cannot SSR window/document objects inside Google Maps. 
-// This forces the component to only render on the client side.
-// =========================================================================
-const CookieDataDisplay = dynamic(
-  () => import("../components/Dashboard/CookieDataDisplay"),
-  { 
-    ssr: false, 
-    loading: () => (
-      <section className="w-full max-w-7xl mx-auto p-6 flex flex-col items-center justify-center min-h-[50vh]">
-        <div className="relative flex h-8 w-8 mb-4">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--primary)] opacity-40"></span>
-          <span className="relative inline-flex rounded-full h-8 w-8 bg-[var(--primary)] shadow-[0_0_15px_var(--primary)]"></span>
-        </div>
-        <p className="text-[var(--primary)] font-mono text-sm tracking-widest uppercase animate-pulse">Initializing Global Heatmap...</p>
-      </section>
-    )
-  }
-);
 
 // --- THEME HUES FOR GLOBAL CSS CALCULATION ---
 const THEME_HUES = [
