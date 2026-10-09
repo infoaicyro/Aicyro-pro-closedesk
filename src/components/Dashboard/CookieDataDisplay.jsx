@@ -1,17 +1,12 @@
+"use client";
+
 import React, { useEffect, useState, useMemo, memo, useRef, useCallback } from "react";
 import { ref, onValue, remove, update } from "firebase/database";
 import { db } from "../../lib/firebase";
-import {
-  ComposableMap,
-  Geographies,
-  Geography,
-  Marker,
-  ZoomableGroup,
-} from "react-simple-maps";
 
-import { geoContains, geoCentroid, geoBounds } from "d3-geo";
+// Google Maps React components
+import { APIProvider, Map, AdvancedMarker, useMap } from "@vis.gl/react-google-maps";
 
-const geoUrl = "https://unpkg.com/world-atlas@2.0.2/countries-110m.json";
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 const getRelativeTime = (timestamp, now) => {
@@ -25,7 +20,6 @@ const getRelativeTime = (timestamp, now) => {
 
 const getArchiveTimeLeft = (archivedAt, now) => {
   if (!archivedAt) return "Pending 30-day cycle";
-
   const expiryTime = new Date(archivedAt).getTime() + THIRTY_DAYS_MS;
   const diffInSeconds = Math.floor((expiryTime - now) / 1000);
 
@@ -36,17 +30,16 @@ const getArchiveTimeLeft = (archivedAt, now) => {
   return `${Math.floor(diffInSeconds / 86400)} days left`;
 };
 
-// OPTIMIZATION 1: Wrap marker in React.memo to prevent global re-renders
-const CustomMapMarker = memo(({ cookie, zoom, isJustNow, isActive, onMarkerClick }) => {
+// High-Tech Custom Marker with Sonar Radar Wave Rings
+const CustomGoogleMarker = memo(({ cookie, isJustNow, isActive, onMarkerClick }) => {
   const [placeName, setPlaceName] = useState("");
 
   useEffect(() => {
     if (!isActive || placeName) return;
-
     const fetchPlaceName = async () => {
       try {
         const res = await fetch(
-          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${cookie.location.lat}&longitude=${cookie.location.lng}&localityLanguage=en`,
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${cookie.location.lat}&longitude=${cookie.location.lng}&localityLanguage=en`
         );
         if (res.ok) {
           const data = await res.json();
@@ -58,48 +51,124 @@ const CustomMapMarker = memo(({ cookie, zoom, isJustNow, isActive, onMarkerClick
         console.error("Failed to reverse geocode for map:", error);
       }
     };
-
     fetchPlaceName();
   }, [isActive, cookie.location.lat, cookie.location.lng, placeName]);
 
-  const markerScale = 1 / zoom;
-  const textScale = markerScale * (1 + (zoom - 1) * 0.4);
-
   return (
-    <Marker coordinates={[cookie.location.lng, cookie.location.lat]}>
-      <g
-        transform={`scale(${markerScale})`}
-        style={{ cursor: "pointer" }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onMarkerClick(cookie.id);
-        }}
-      >
+    <AdvancedMarker
+      position={{ lat: Number(cookie.location.lat), lng: Number(cookie.location.lng) }}
+      onClick={() => onMarkerClick(cookie.id)}
+      zIndex={isActive ? 100 : isJustNow ? 50 : 1}
+    >
+      <div className="relative flex flex-col items-center justify-center cursor-pointer select-none">
+        
+        {/* Multi-layered Sonar Radar Beacon Effect for Active/New Devices */}
         {isJustNow && (
-          <circle r={14} fill="var(--primary)" opacity={0.4} className="animate-ping" />
+          <div className="absolute top-[12px] left-[12px] -translate-x-1/2 -translate-y-1/2 pointer-events-none w-0 h-0 flex items-center justify-center">
+            {/* Ambient Radial Core Glow */}
+            <div className="sonar-beacon-core" />
+            {/* 3 Staggered Sonar Radar Rings */}
+            <div className="sonar-wave sonar-delay-1" />
+            <div className="sonar-wave sonar-delay-2" />
+            <div className="sonar-wave sonar-delay-3" />
+          </div>
         )}
-        <g transform="translate(-12, -24)">
-          <path
-            d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
-            fill="var(--primary)"
-            stroke="var(--background)"
-            strokeWidth="1.5"
-          />
-        </g>
-        <circle r={16} fill="transparent" transform="translate(0, -12)" />
-      </g>
-      {isActive && (
-        <g transform={`translate(0, -${28 * markerScale}) scale(${textScale})`} style={{ pointerEvents: "none" }}>
-          <text textAnchor="middle" y="-10" fontSize="8px" fontWeight="bold" fill="var(--foreground)" stroke="var(--background)" strokeWidth="2.5" paintOrder="stroke">
-            {cookie.username}
-          </text>
-          <text textAnchor="middle" y="0" fontSize="7px" fontWeight="600" fill="var(--primary)" stroke="var(--background)" strokeWidth="2" paintOrder="stroke">
-            {placeName || "Fetching location..."}
-          </text>
-        </g>
-      )}
-    </Marker>
+
+        {/* Marker Icon Pin */}
+        <div className="relative group/pin transition-transform duration-200 hover:scale-125 z-10">
+          <svg width="24" height="24" viewBox="0 0 24 24">
+            <path
+              d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
+              fill="var(--primary)"
+              stroke="var(--background)"
+              strokeWidth="1.5"
+            />
+          </svg>
+          {isJustNow && (
+            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-white dark:border-black"></span>
+            </span>
+          )}
+        </div>
+
+        {/* Selected Marker Detail Card */}
+        {isActive && (
+          <div className="absolute bottom-[34px] flex flex-col items-center pointer-events-none bg-[var(--background)]/95 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-2xl border border-[var(--primary)]/40 min-w-max animate-in fade-in zoom-in-95 duration-200 z-50">
+            <span className="text-xs font-bold text-[var(--foreground)] tracking-wide leading-tight">{cookie.username}</span>
+            <span className="text-[10px] font-semibold text-[var(--primary)] leading-tight mt-0.5">{placeName || "Fetching location..."}</span>
+            <div className="w-2 h-2 bg-[var(--background)] border-r border-b border-[var(--primary)]/40 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2"></div>
+          </div>
+        )}
+      </div>
+    </AdvancedMarker>
   );
+});
+
+// Country Heatmap using Google Maps GeoJSON Data Layer
+const HeatmapLayer = memo(({ mappedCookies }) => {
+  const map = useMap();
+  const geoJsonLoaded = useRef(false);
+
+  const { countryCounts, maxDeviceCount } = useMemo(() => {
+    const counts = {};
+    let max = 0;
+
+    mappedCookies.forEach((cookie) => {
+      const matchedCountryName = cookie.ipLocation?.country;
+      if (matchedCountryName) {
+        counts[matchedCountryName] = (counts[matchedCountryName] || 0) + 1;
+        if (counts[matchedCountryName] > max) max = counts[matchedCountryName];
+      }
+    });
+
+    return { countryCounts: counts, maxDeviceCount: max };
+  }, [mappedCookies]);
+
+  useEffect(() => {
+    if (!map) return;
+
+    if (!geoJsonLoaded.current) {
+      map.data.loadGeoJson("https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json");
+      geoJsonLoaded.current = true;
+
+      // When a country is clicked, calculate its bounds and auto-zoom the map
+      map.data.addListener("click", (event) => {
+        const bounds = new window.google.maps.LatLngBounds();
+        event.feature.getGeometry().forEachLatLng((latLng) => {
+          bounds.extend(latLng);
+        });
+        map.fitBounds(bounds);
+      });
+    }
+
+    map.data.setStyle((feature) => {
+      const countryName = feature.getProperty("name");
+      const count = countryCounts[countryName] || 0;
+      
+      let fillOpacity = 0.03;
+      if (count > 0) {
+        const minOpacity = 0.15;
+        const maxOpacity = 0.85;
+        if (maxDeviceCount <= 1) {
+          fillOpacity = maxOpacity;
+        } else {
+          fillOpacity = minOpacity + ((count - 1) / (maxDeviceCount - 1)) * (maxOpacity - minOpacity);
+        }
+      }
+
+      return {
+        fillColor: "var(--primary)",
+        fillOpacity: fillOpacity,
+        strokeColor: "var(--foreground-muted)",
+        strokeOpacity: 0.15,
+        strokeWeight: 0.5,
+        cursor: count > 0 ? "pointer" : "default" 
+      };
+    });
+  }, [map, countryCounts, maxDeviceCount]);
+
+  return null;
 });
 
 const LocationRenderer = ({ location }) => {
@@ -107,11 +176,10 @@ const LocationRenderer = ({ location }) => {
 
   useEffect(() => {
     if (location?.status !== "allowed" || !location?.lat || !location?.lng) return;
-
     const fetchPlaceName = async () => {
       try {
         const res = await fetch(
-          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${location.lat}&longitude=${location.lng}&localityLanguage=en`,
+          `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${location.lat}&longitude=${location.lng}&localityLanguage=en`
         );
         if (res.ok) {
           const data = await res.json();
@@ -123,7 +191,6 @@ const LocationRenderer = ({ location }) => {
         console.error("Failed to reverse geocode:", error);
       }
     };
-
     fetchPlaceName();
   }, [location]);
 
@@ -132,7 +199,14 @@ const LocationRenderer = ({ location }) => {
   if (location?.status !== "allowed" || !location?.lat || !location?.lng) return <span>Not Captured</span>;
 
   return (
-    <a href={`https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lng}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[var(--primary)] hover:underline flex items-center gap-1.5 transition-all truncate w-full" title={placeName ? `${placeName} (${location.lat}, ${location.lng})` : `${location.lat}, ${location.lng}`}>
+    <a
+      href={`https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lng}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="text-[var(--primary)] hover:underline flex items-center gap-1.5 transition-all truncate w-full"
+      title={placeName ? `${placeName} (${location.lat}, ${location.lng})` : `${location.lat}, ${location.lng}`}
+    >
       <span className="truncate">
         {placeName ? <span className="font-medium mr-1">{placeName}</span> : ""}
         <span className="text-[10px] opacity-75">({Number(location.lat).toFixed(4)}, {Number(location.lng).toFixed(4)})</span>
@@ -144,80 +218,6 @@ const LocationRenderer = ({ location }) => {
   );
 };
 
-const HeatmapGeographies = memo(({ geographies, mappedCookies, onCountryClick }) => {
-  const { countryCounts, maxDeviceCount } = useMemo(() => {
-    const counts = {};
-    let max = 0;
-
-    const geoNameMap = new Map();
-    geographies.forEach(g => geoNameMap.set(g.properties.name, g));
-
-    mappedCookies.forEach((cookie) => {
-      let matchedCountryName = null;
-
-      if (cookie.ipLocation?.country && geoNameMap.has(cookie.ipLocation.country)) {
-        matchedCountryName = cookie.ipLocation.country;
-      } else if (cookie.location?.lng && cookie.location?.lat) {
-        const lng = Number(cookie.location.lng);
-        const lat = Number(cookie.location.lat);
-        if (!isNaN(lng) && !isNaN(lat)) {
-          const matchedGeo = geographies.find(geo => geoContains(geo, [lng, lat]));
-          if (matchedGeo) matchedCountryName = matchedGeo.properties.name;
-        }
-      }
-
-      if (matchedCountryName) {
-        counts[matchedCountryName] = (counts[matchedCountryName] || 0) + 1;
-        if (counts[matchedCountryName] > max) max = counts[matchedCountryName];
-      }
-    });
-
-    return { countryCounts: counts, maxDeviceCount: max };
-  }, [geographies, mappedCookies]);
-
-  const getOpacityForCountry = (countryName) => {
-    const count = countryCounts[countryName] || 0;
-    if (count === 0) return 0.03; 
-
-    const minOpacity = 0.15;
-    const maxOpacity = 0.85;
-    
-    if (maxDeviceCount <= 1) return maxOpacity; 
-
-    const scaleRange = maxOpacity - minOpacity;
-    const domainRange = maxDeviceCount - 1; 
-    
-    return minOpacity + ((count - 1) / domainRange) * scaleRange;
-  };
-
-  return geographies.map((geo) => {
-    const countryName = geo.properties.name;
-    const deviceCount = countryCounts[countryName] || 0;
-    const dynamicOpacity = getOpacityForCountry(countryName);
-
-    return (
-      <Geography
-        key={geo.rsmKey}
-        geography={geo}
-        onClick={(e) => {
-          e.stopPropagation();
-          onCountryClick(geo, countryName, deviceCount);
-        }}
-        fill="var(--primary)"
-        fillOpacity={dynamicOpacity}
-        stroke="var(--foreground-muted)"
-        strokeOpacity={0.15}
-        strokeWidth={0.5}
-        style={{
-          default: { outline: "none", transition: "fill-opacity 250ms ease" },
-          hover: { fillOpacity: Math.min(dynamicOpacity + 0.2, 1), outline: "none", cursor: deviceCount > 0 ? "pointer" : "default", transition: "fill-opacity 150ms ease" },
-          pressed: { outline: "none" },
-        }}
-      />
-    );
-  });
-});
-
 export default function CookieDataDisplay() {
   const [cookies, setCookies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -225,16 +225,15 @@ export default function CookieDataDisplay() {
   const [viewMode, setViewMode] = useState("active");
 
   const [selectedCookies, setSelectedCookies] = useState([]);
-  const [selectedRegion, setSelectedRegion] = useState(null);
-
-  const [rippleActive, setRippleActive] = useState(false);
-  const lastPulseRef = useRef(null);
 
   const [toast, setToast] = useState({ visible: false, message: "", type: "info" });
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: "", message: "", onConfirm: null, confirmText: "Confirm", confirmColor: "bg-[var(--primary)]" });
 
   const [filters, setFilters] = useState({ device: "All", region: "All", language: "All", location: "All" });
-  const [position, setPosition] = useState({ coordinates: [0, 20], zoom: 1 });
+  
+  // Camera State
+  const [mapCenter, setMapCenter] = useState({ lat: 20, lng: 0 });
+  const [mapZoom, setMapZoom] = useState(3);
   const [activeMapMarker, setActiveMapMarker] = useState(null);
 
   useEffect(() => {
@@ -293,23 +292,6 @@ export default function CookieDataDisplay() {
   const mappedCookies = displayCookies.filter(
     (c) => c.location?.status === "allowed" && c.location?.lat && c.location?.lng,
   );
-
-  useEffect(() => {
-    if (mappedCookies.length === 0 || viewMode !== "active") return;
-
-    const newestSession = mappedCookies[0];
-    const timeSinceUpdate = Date.now() - new Date(newestSession.updatedAt).getTime();
-    const signature = `${newestSession.id}-${newestSession.updatedAt}`;
-
-    if (timeSinceUpdate < 5000 && lastPulseRef.current !== signature) {
-      lastPulseRef.current = signature;
-      
-      setRippleActive(false); 
-      setTimeout(() => setRippleActive(true), 50);
-      setTimeout(() => setRippleActive(false), 3050);
-    }
-  }, [mappedCookies, viewMode]);
-
 
   const showToast = (message, type = "info") => {
     setToast({ visible: true, message, type });
@@ -416,40 +398,21 @@ export default function CookieDataDisplay() {
 
   const handleZoomIn = (e) => {
     e.stopPropagation();
-    setPosition((pos) => ({ ...pos, zoom: Math.min(pos.zoom * 1.5, 12) }));
+    setMapZoom((prev) => Math.min(prev + 1, 15));
   };
 
   const handleZoomOut = (e) => {
     e.stopPropagation();
-    setPosition((pos) => ({ ...pos, zoom: Math.max(pos.zoom / 1.5, 1) }));
+    setMapZoom((prev) => Math.max(prev - 1, 2));
   };
 
   const handleResetMap = (e) => {
     if (e) e.stopPropagation();
-    setPosition({ coordinates: [0, 20], zoom: 1 });
+    setMapZoom(3);
+    setMapCenter({ lat: 20, lng: 0 });
     setActiveMapMarker(null);
-    setSelectedRegion(null);
   };
 
-  const handleMoveEnd = (newPosition) => {
-    setPosition(newPosition);
-  };
-
-  const handleCountryClick = useCallback((geo, countryName, deviceCount) => {
-    setSelectedRegion({ name: countryName, count: deviceCount });
-    const centroid = geoCentroid(geo);
-    const bounds = geoBounds(geo);
-    const dx = Math.abs(bounds[1][0] - bounds[0][0]);
-    const dy = Math.abs(bounds[1][1] - bounds[0][1]);
-
-    let nextZoom = Math.min(10, 100 / Math.max(dx, dy));
-    if (["United States", "Russia", "Canada", "Antarctica"].includes(countryName)) nextZoom = 2;
-    if (["France", "United Kingdom"].includes(countryName)) nextZoom = 4;
-
-    setPosition({ coordinates: centroid, zoom: nextZoom });
-  }, []);
-
-  // OPTIMIZATION 2: Stabilize marker click reference
   const handleMarkerClick = useCallback((id) => {
     setActiveMapMarker((prev) => (prev === id ? null : id));
   }, []);
@@ -488,34 +451,65 @@ export default function CookieDataDisplay() {
 
   return (
     <section className="w-full max-w-7xl mx-auto p-6 fade-in">
-      {/* OPTIMIZATION 3: GPU-Accelerated Hardware Animation ONLY */}
+      {/* High-Tech Sonar Ripple Animations */}
       <style>{`
-        @keyframes oceanRipple {
-          0% { transform: translate(-50%, -50%) scale(0.1); opacity: 0.8; }
-          100% { transform: translate(-50%, -50%) scale(3.5); opacity: 0; }
+        @keyframes sonarWave {
+          0% {
+            width: 14px;
+            height: 14px;
+            opacity: 0.95;
+            box-shadow: 0 0 10px 2px var(--primary);
+          }
+          50% {
+            opacity: 0.45;
+          }
+          100% {
+            width: 110px;
+            height: 110px;
+            opacity: 0;
+            box-shadow: 0 0 25px 6px var(--primary);
+          }
         }
-        .ripple-ring {
+
+        @keyframes beaconCoreBreath {
+          0%, 100% {
+            transform: scale(0.9);
+            opacity: 0.8;
+          }
+          50% {
+            transform: scale(1.4);
+            opacity: 1;
+            box-shadow: 0 0 18px 4px var(--primary);
+          }
+        }
+
+        .sonar-beacon-core {
           position: absolute;
-          top: 50%;
-          left: 50%;
-          width: 500px;
-          height: 500px;
-          border-radius: 50%;
-          border: 2px solid var(--primary);
+          width: 12px;
+          height: 12px;
+          border-radius: 9999px;
+          background: var(--primary);
+          box-shadow: 0 0 10px 2px var(--primary);
+          animation: beaconCoreBreath 2s ease-in-out infinite;
+        }
+
+        .sonar-wave {
+          position: absolute;
+          border-radius: 9999px;
+          border: 1.5px solid var(--primary);
           background: radial-gradient(circle, var(--primary) 0%, transparent 60%);
+          animation: sonarWave 2.8s cubic-bezier(0.1, 0.7, 0.3, 1) infinite;
           pointer-events: none;
-          will-change: transform, opacity;
         }
-        .animate-ocean-ripple {
-          animation: oceanRipple 3.5s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
-        }
-        .animate-ocean-ripple-delayed {
-          animation: oceanRipple 3.5s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
-          animation-delay: 0.5s;
-          opacity: 0; 
-        }
+
+        .sonar-delay-1 { animation-delay: 0s; }
+        .sonar-delay-2 { animation-delay: 0.9s; }
+        .sonar-delay-3 { animation-delay: 1.8s; }
+
+        .gmnoprint, .gm-style-cc { display: none !important; }
       `}</style>
 
+      {/* Header */}
       <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <div className="flex items-center gap-3 mb-2">
@@ -539,39 +533,31 @@ export default function CookieDataDisplay() {
         </div>
       </div>
 
+      {/* Action Toolbar */}
       {selectedCookies.length > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 sm:gap-3 animate-in slide-in-from-bottom-8 fade-in zoom-in-95 duration-300 bg-[var(--background)]/80 backdrop-blur-xl border border-[var(--border-color)] px-5 py-3 rounded-full shadow-2xl w-max max-w-[95vw] overflow-x-auto">
           <span className="text-sm font-medium text-[var(--foreground-muted)] mr-2 whitespace-nowrap">
             {selectedCookies.length} Selected
           </span>
-
           <button onClick={handleSelectAll} className="px-4 py-2 text-sm font-semibold rounded-full bg-[var(--background)] border border-[var(--border-color)] text-[var(--foreground)] hover:bg-[var(--primary)] hover:text-white hover:border-[var(--primary)] transition-colors shadow-sm whitespace-nowrap">
             {selectedCookies.length === displayCookies.length ? "Deselect All" : "Select All"}
           </button>
-
           {viewMode === "active" ? (
             <button onClick={handleArchiveSelected} className="px-4 py-2 text-sm font-semibold rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-colors shadow-sm whitespace-nowrap">Archive</button>
           ) : (
             <button onClick={handleRestoreSelected} className="px-4 py-2 text-sm font-semibold rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-colors shadow-sm whitespace-nowrap">Restore</button>
           )}
-
           <button onClick={handleDeleteSelected} className="px-4 py-2 text-sm font-semibold rounded-full bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500 hover:text-white transition-colors shadow-sm whitespace-nowrap">Delete</button>
         </div>
       )}
 
+      {/* Map Card */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-        <div className="lg:col-span-3 theme-glass-card border border-[var(--border-color)] rounded-3xl relative overflow-hidden flex items-center justify-center min-h-[400px] shadow-sm group bg-[var(--card-bg)]">
+        <div className="lg:col-span-3 theme-glass-card border border-[var(--border-color)] rounded-3xl relative overflow-hidden flex items-center justify-center min-h-[420px] shadow-sm group bg-[var(--card-bg)]">
           
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,var(--primary)_0%,transparent_70%)] opacity-[0.04] pointer-events-none"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,var(--primary)_0%,transparent_70%)] opacity-[0.04] pointer-events-none z-[5]"></div>
 
-          {rippleActive && (
-            <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
-              <div className="ripple-ring animate-ocean-ripple" style={{ boxShadow: '0 0 60px var(--primary) inset' }}></div>
-              <div className="ripple-ring animate-ocean-ripple-delayed" style={{ boxShadow: '0 0 30px var(--primary) inset' }}></div>
-            </div>
-          )}
-
-          <div className="absolute top-6 left-6 z-20 pointer-events-none bg-[var(--background)]/70 backdrop-blur-md border border-[var(--border-color)] px-4 py-3 rounded-2xl shadow-sm">
+          <div className="absolute top-6 left-6 z-30 pointer-events-none bg-[var(--background)]/75 backdrop-blur-md border border-[var(--border-color)] px-4 py-3 rounded-2xl shadow-sm">
             <h3 className="text-sm font-bold text-[var(--foreground)] flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -584,61 +570,55 @@ export default function CookieDataDisplay() {
             </p>
           </div>
 
-          <div className="absolute inset-0 pt-8" onClick={(e) => handleResetMap(e)}>
-            <ComposableMap projection="geoMercator" projectionConfig={{ scale: 135, center: [0, 30] }} style={{ width: "100%", height: "100%" }}>
-              <ZoomableGroup zoom={position.zoom} center={position.coordinates} onMoveEnd={handleMoveEnd} maxZoom={12}>
-                <Geographies geography={geoUrl}>
-                  {({ geographies }) => (
-                    <HeatmapGeographies 
-                      geographies={geographies} 
-                      mappedCookies={mappedCookies}
-                      onCountryClick={handleCountryClick}
-                    />
-                  )}
-                </Geographies>
+          <div className="absolute inset-0 z-[10]">
+            <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}>
+              <Map
+                mapId={process.env.NEXT_PUBLIC_GOOGLE_MAP_ID}
+                zoom={mapZoom}
+                center={mapCenter}
+                onCameraChanged={(ev) => {
+                  setMapZoom(ev.detail.zoom);
+                  setMapCenter(ev.detail.center);
+                }}
+                onClick={() => setActiveMapMarker(null)}
+                disableDefaultUI={true}
+                gestureHandling="greedy"
+              >
+                <HeatmapLayer mappedCookies={mappedCookies} />
+
                 {mappedCookies.map((c) => {
                   const isJustNow = now - new Date(c.updatedAt).getTime() < 60000;
                   return (
-                    <CustomMapMarker
+                    <CustomGoogleMarker
                       key={c.id}
                       cookie={c}
-                      zoom={position.zoom}
                       isJustNow={isJustNow}
                       isActive={activeMapMarker === c.id}
                       onMarkerClick={handleMarkerClick}
                     />
                   );
                 })}
-              </ZoomableGroup>
-            </ComposableMap>
-
-            {selectedRegion && (
-              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 bg-[var(--card-bg)]/90 backdrop-blur-md border border-[var(--primary)] px-6 py-3 rounded-2xl shadow-[0_0_15px_var(--primary)] animate-in slide-in-from-top-4 fade-in">
-                <h4 className="text-[var(--foreground)] font-bold text-lg text-center">
-                  {selectedRegion.name}
-                </h4>
-                <p className="text-[var(--primary)] font-mono text-sm text-center mt-1">
-                  {selectedRegion.count} {selectedRegion.count === 1 ? "Device" : "Devices"} Visits
-                </p>
-              </div>
-            )}
+              </Map>
+            </APIProvider>
           </div>
 
-          <div className="absolute bottom-6 right-6 flex items-center bg-[var(--background)]/80 backdrop-blur-md border border-[var(--border-color)] rounded-full z-20 shadow-lg p-1">
-            <button onClick={handleZoomIn} className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors cursor-pointer">
+          {/* Map Controls */}
+          <div className="absolute bottom-6 right-6 flex items-center bg-[var(--background)]/80 backdrop-blur-md border border-[var(--border-color)] rounded-full z-30 shadow-lg p-1">
+            <button onClick={handleZoomIn} title="Zoom In" className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors cursor-pointer">
               <svg className="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
             </button>
             <div className="w-[1px] h-4 bg-[var(--border-color)] mx-1"></div>
-            <button onClick={handleZoomOut} className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors cursor-pointer">
+            <button onClick={handleZoomOut} title="Zoom Out" className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors cursor-pointer">
               <svg className="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" /></svg>
             </button>
             <div className="w-[1px] h-4 bg-[var(--border-color)] mx-1"></div>
-            <button onClick={handleResetMap} className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors cursor-pointer">
+            <button onClick={handleResetMap} title="Reset View" className="w-8 h-8 flex items-center justify-center text-[var(--foreground)] rounded-full hover:bg-[var(--card-bg)] hover:text-[var(--primary)] transition-colors cursor-pointer">
               <svg className="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             </button>
           </div>
         </div>
 
+        {/* Stats Column */}
         <div className="flex flex-col gap-4">
           <div className="theme-glass-card p-6 flex flex-col justify-center flex-1 border-l-4 border-l-[var(--foreground-muted)] hover:shadow-lg transition-all shadow-sm">
             <span className="text-[var(--foreground-muted)] text-xs uppercase tracking-wider mb-1 font-mono">{viewMode === "active" ? "Total Sessions" : "Archived Sessions"}</span>
@@ -657,6 +637,7 @@ export default function CookieDataDisplay() {
         </div>
       </div>
 
+      {/* Filters */}
       {cookies.length > 0 && (
         <div className="mb-8 flex flex-wrap items-center gap-4 bg-[var(--card-bg)]/80 backdrop-blur-sm border border-[var(--border-color)] p-4 rounded-2xl shadow-sm">
           <div className="flex items-center gap-2 mr-2">
@@ -673,6 +654,7 @@ export default function CookieDataDisplay() {
         </div>
       )}
 
+      {/* Grid of Session Cards */}
       {displayCookies.length === 0 ? (
         <div className="text-center py-20 theme-glass-card border-dashed">
           <p className="text-[var(--foreground-muted)] font-medium">{hasActiveFilters ? "No sessions match your current filters." : viewMode === "active" ? "No active sessions found." : "No archived sessions found."}</p>
@@ -714,7 +696,6 @@ export default function CookieDataDisplay() {
                       <svg className="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                       {getRelativeTime(cookie.updatedAt, now)}
                     </span>
-
                     {viewMode === "archived" && (
                       <span className="text-[10px] font-bold text-red-400 mt-1.5 flex items-center gap-1.5 animate-in fade-in duration-500 bg-red-500/10 w-fit px-2 py-0.5 rounded border border-red-500/20">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -722,7 +703,6 @@ export default function CookieDataDisplay() {
                       </span>
                     )}
                   </div>
-
                   <span className={`text-[10px] font-bold px-3 py-1.5 rounded-full uppercase tracking-widest border flex items-center gap-1.5 shadow-sm transition-colors ${consentAccepted ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"}`}>
                     <div className={`w-1.5 h-1.5 rounded-full ${consentAccepted ? "bg-emerald-500" : "bg-amber-500"}`} />
                     {cookie.consentStatus}
@@ -769,7 +749,7 @@ export default function CookieDataDisplay() {
                   </p>
                   <p className="flex items-center gap-3">
                     <span className="flex items-center justify-center w-7 h-7 shrink-0 rounded-lg bg-[var(--background)] border border-[var(--border-color)] text-[var(--primary)]">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     </span>
                     <strong className="text-[var(--foreground)] w-20 shrink-0">IP Location</strong>
                     <span className="text-[var(--foreground-muted)] truncate flex-1">
@@ -808,6 +788,7 @@ export default function CookieDataDisplay() {
         </div>
       )}
 
+      {/* Confirmation Modal */}
       {confirmDialog.isOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200 p-4">
           <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-6 shadow-2xl max-w-sm w-full animate-in zoom-in-95 duration-200">
@@ -821,6 +802,7 @@ export default function CookieDataDisplay() {
         </div>
       )}
 
+      {/* Toast Alert */}
       {toast.visible && (
         <div className="fixed top-6 right-6 z-[250] animate-in slide-in-from-top-5 fade-in duration-300">
           <div className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-md ${toast.type === "error" ? "bg-red-500/10 border-red-500/20 text-red-500" : toast.type === "success" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" : "bg-[var(--primary)]/10 border-[var(--primary)]/20 text-[var(--primary)]"}`}>
