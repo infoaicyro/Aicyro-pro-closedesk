@@ -34,7 +34,6 @@ export default function CookieDataDisplay() {
         const data = snapshot.val();
         const currentTime = Date.now();
         const validData = [];
-
         Object.keys(data).forEach((key) => {
           const item = data[key];
           if (item.isArchived && item.archivedAt) {
@@ -343,3 +342,4 @@ export default function CookieDataDisplay() {
     </section>
   );
 }
+
