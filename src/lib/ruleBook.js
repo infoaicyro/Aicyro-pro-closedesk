@@ -26,6 +26,7 @@ export async function getMasterRuleBook(
   mode = "text",
   currentLeadData = null,
   retrievedKnowledge = "",
+  tenantId = "default"
 ) {
   let botConfig = {
     serviceCategory: "General", // Determines active industry flows
@@ -58,7 +59,7 @@ export async function getMasterRuleBook(
       "Existing chatbot":
         "Most bots are rigid decision trees. CloseDesk uses conversational AI to adapt fluidly to the user.",
       "Phone preference":
-        "CloseDesk includes a Voice AI agent that handles phone calls naturally.",
+        "CloseDesk includes a WebRTC Browser Voice AI agent that handles voice conversations naturally.",
       "Customer resistance":
         "The AI is designed to be warm and conversational, and it seamlessly escalates to humans when needed.",
       Price:
@@ -81,8 +82,26 @@ export async function getMasterRuleBook(
     unavailableBehavior: "collect_lead",
     aiModel: "gpt-4o-mini",
 
+    // --- DYNAMIC RULES & BASE PROMPT DEFAULTS ---
+    basePrompt:
+      "Act as a friendly, human-like concierge. Build rapport and naturally weave your questions into a conversational flow. Avoid sounding like a strict robotic form.",
+    additionalConversationalRules:
+      "1. Acknowledge user input before asking the next question.\n2. Keep responses brief but warm.",
+    services: [
+      "AI Voice Agent",
+      "Text Chatbot",
+      "Automated Booking",
+      "Website Audit",
+    ],
+
+    // --- BOOKING & CALENDAR FEATURE FLAGS ---
+    enableDirectBooking: true,
+    calendarActive: true,
+
     // --- VOICE FEATURE FLAG & CONFIG ---
     voiceEnabled: true, // Master kill switch
+    voiceChatAgent: true,
+    photoUploads: true,
     aiVoiceModel: "gpt-realtime-2.1-mini",
     voice: "ash",
 
@@ -98,14 +117,84 @@ export async function getMasterRuleBook(
   };
 
   try {
-    const snapshot = await get(ref(db, "settings/chatbot_config"));
+    // Multi-tenant partition lookup with fallback to global settings populated by Chatbotsetting.jsx
+    let snapshot = null;
+    if (tenantId && tenantId !== "default") {
+      try {
+        const tenantSnap = await get(ref(db, `tenants/${tenantId}/chatbot_config`));
+        if (tenantSnap.exists()) snapshot = tenantSnap;
+      } catch (_) {}
+    }
+    if (!snapshot) {
+      snapshot = await get(ref(db, "settings/chatbot_config"));
+    }
     if (snapshot.exists()) {
       const data = snapshot.val();
+      const voiceActive = data.voiceChatAgent !== undefined
+        ? data.voiceChatAgent !== false
+        : (data.voiceEnabled !== false);
+      const photoActive = data.photoUploads !== undefined
+        ? data.photoUploads !== false
+        : (data.photoUploadsEnabled !== undefined ? data.photoUploadsEnabled !== false : true);
+
+      const calExists = Boolean(
+        data.calendarActive !== false &&
+        (data.calendarIntegration || data.calendarActive || data.integrations?.calendar || data.integrations?.GoogleCalendar || data.integrations?.Make || data.bookingRule)
+      );
+      const directBooking = (data.enableDirectBooking === false || data.enableDirectBooking === null)
+        ? (calExists ? true : false)
+        : (data.enableDirectBooking !== undefined ? data.enableDirectBooking : (calExists || true));
+      const calActive = (data.calendarActive === false || data.calendarActive === null)
+        ? (calExists ? true : false)
+        : (data.calendarActive !== undefined ? data.calendarActive : true);
+
       botConfig = {
         ...botConfig,
         ...data,
+        botName: data.botName || botConfig.botName,
+        botIdentity: data.botIdentity || botConfig.botIdentity,
+        companyContext: data.companyContext || botConfig.companyContext,
+        serviceCategory: data.serviceCategory || botConfig.serviceCategory,
+        customRules: data.customRules || botConfig.customRules,
+        additionalConversationalRules:
+          data.additionalConversationalRules || botConfig.additionalConversationalRules,
+        basePrompt: data.basePrompt || botConfig.basePrompt,
+        tone: data.tone || botConfig.tone,
+        botVoice: data.botVoice || data.voice || botConfig.voice,
+        voice: data.botVoice || data.voice || botConfig.voice,
+        voiceChatAgent: voiceActive,
+        voiceEnabled: voiceActive,
+        photoUploads: photoActive,
+        enableDirectBooking: directBooking,
+        calendarActive: calActive,
+        leadCaptureFields:
+          Array.isArray(data.leadCaptureFields) && data.leadCaptureFields.length
+            ? data.leadCaptureFields
+            : botConfig.leadCaptureFields,
+        businessIntelligenceFields:
+          Array.isArray(data.businessIntelligenceFields) && data.businessIntelligenceFields.length
+            ? data.businessIntelligenceFields
+            : botConfig.businessIntelligenceFields,
+        services:
+          Array.isArray(data.services) && data.services.length
+            ? data.services
+            : (Array.isArray(data.capabilities) && data.capabilities.length ? data.capabilities : botConfig.services),
         capabilities:
-          data.capabilities || data.services || botConfig.capabilities,
+          Array.isArray(data.services) && data.services.length
+            ? data.services
+            : (data.capabilities || botConfig.capabilities),
+        faqs: Array.isArray(data.faqs) && data.faqs.length ? data.faqs : botConfig.faqs,
+        qualificationQuestions:
+          Array.isArray(data.qualificationQuestions) && data.qualificationQuestions.length
+            ? data.qualificationQuestions
+            : botConfig.qualificationQuestions,
+        bookingRule: data.bookingRule || botConfig.bookingRule,
+        escalationRule: data.escalationRule || botConfig.escalationRule,
+        unavailableBehavior: data.unavailableBehavior || botConfig.unavailableBehavior,
+        aiModel: data.aiModel || botConfig.aiModel,
+        temperature: typeof data.temperature === "number" ? data.temperature : botConfig.temperature,
+        strictValidation:
+          data.strictValidation !== undefined ? Boolean(data.strictValidation) : botConfig.strictValidation,
         integrations: data.integrations || botConfig.integrations,
         approvedPricing: data.approvedPricing || botConfig.approvedPricing,
         objections: data.objections || botConfig.objections,
@@ -116,8 +205,16 @@ export async function getMasterRuleBook(
   }
 
   // Allows the regression suite (US-05.07) to dynamically test different flows without changing the live DB
-  if (currentLeadData && currentLeadData.serviceCategory) {
-    botConfig.serviceCategory = currentLeadData.serviceCategory;
+  if (currentLeadData) {
+    if (currentLeadData.serviceCategory) {
+      botConfig.serviceCategory = currentLeadData.serviceCategory;
+    }
+    if (currentLeadData.enableDirectBooking !== undefined) {
+      botConfig.enableDirectBooking = currentLeadData.enableDirectBooking;
+    }
+    if (currentLeadData.calendarActive !== undefined) {
+      botConfig.calendarActive = currentLeadData.calendarActive;
+    }
   }
 
   const today = new Date();
@@ -276,8 +373,24 @@ COMPANY CONTEXT & KNOWLEDGE:
 Company Context: ${botConfig.companyContext}
 Service Category: ${botConfig.serviceCategory || "General"}
 Capabilities: ${botConfig.capabilities?.length ? botConfig.capabilities.join(", ") : "N/A"}
+Services: ${(botConfig.services?.length ? botConfig.services : botConfig.capabilities || []).join(", ")}
 Approved Pricing: ${botConfig.approvedPricing?.length ? JSON.stringify(botConfig.approvedPricing) : "Unlisted"}
 ${categorySpecificFlow ? `\n${categorySpecificFlow}\n` : ""}
+${botConfig.basePrompt ? `\nCORE SYSTEM OBJECTIVE:\n${botConfig.basePrompt}\n` : ""}
+${botConfig.customRules ? `\nCUSTOM BEHAVIORAL DIRECTIVES:\n${botConfig.customRules}\n` : ""}
+${botConfig.additionalConversationalRules ? `\nCONVERSATIONAL FLOW DIRECTIVES:\n${botConfig.additionalConversationalRules}\n` : ""}
+${botConfig.leadCaptureFields?.length ? `\nLEAD CAPTURE TARGETS (Naturally collect during conversation):\n${botConfig.leadCaptureFields.map((f, i) => `${i + 1}. ${f}`).join("\n")}\n` : ""}
+${botConfig.businessIntelligenceFields?.length ? `\nBUSINESS INTELLIGENCE TARGETS (Listen for and extract silently):\n${botConfig.businessIntelligenceFields.map((f, i) => `${i + 1}. ${f}`).join("\n")}\n` : ""}
+${botConfig.qualificationQuestions?.length ? `\nQUALIFICATION QUESTIONS (Weave naturally into conversation):\n${botConfig.qualificationQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")}\n` : ""}
+${botConfig.faqs?.filter(f => f && f.question && f.answer)?.length ? `\nFREQUENTLY ASKED QUESTIONS (Pre-fed Authoritative Answers):\n${botConfig.faqs.filter(f => f && f.question && f.answer).map(f => `Q: ${f.question}\nA: ${f.answer}`).join("\n\n")}\n` : ""}
+
+OPERATIONAL RULES & POLICIES:
+- DIRECT CALENDAR BOOKING PRIORITY (CRITICAL): If the user explicitly asks to book a meeting and provides their Name, Email, and Phone Number, you MUST immediately trigger the calendar booking function/tool. Do NOT offer a callback unless the calendar tool explicitly fails.
+- Booking Calendar Policy: ${botConfig.bookingRule === "require_all" ? "Require both Phone Number and Email before booking." : botConfig.bookingRule === "require_email" ? "Require Email before booking." : "Allow direct booking immediately."}
+- Escalation Behavior: ${botConfig.escalationRule === "email_admin" ? "Take a message and inform the visitor that admin will email them." : "Provide the support phone number directly."}
+- After-Hours Policy: ${botConfig.unavailableBehavior === "collect_lead" ? "Collect contact details and promise next-day callback." : "Handle inquiries normally regardless of business hours."}
+- Data Validation: ${botConfig.strictValidation ? "Strict format enforcement for contact information." : "Conversational, fluid contact data entry."}
+- Feature Availability: Voice Agent is ${botConfig.voiceChatAgent && botConfig.voiceEnabled ? "ENABLED" : "DISABLED"}; Photo Uploads are ${botConfig.photoUploads ? "ENABLED" : "DISABLED"}; Direct Calendar Booking is ${botConfig.enableDirectBooking && botConfig.calendarActive ? "ENABLED" : "DISABLED"}.
 
 ======================================================================
 12. CROSS-INDUSTRY CONVERSATION RULES (STRICTLY ENFORCED)
@@ -296,7 +409,8 @@ ${categorySpecificFlow ? `\n${categorySpecificFlow}\n` : ""}
 12. BAN ROBOTIC VOCABULARY: NEVER use robotic phrases like "As an AI...", "Please provide your...", or "I have updated your context." INSTEAD, force the use of natural contractions (I'm, we'll, let's) and conversational fillers ("Got it," "Makes sense," "Sure thing."). Speak like a real human concierge.
 13. MANDATORY MESSAGE CHUNKING: You MUST use the pipe delimiter "|" to separate distinct thoughts. Never write a long paragraph. If your response is longer than two sentences, you MUST insert a "|" to split it into separate chat bubbles. (Example: "Aicyro provides automated AI business systems. | We offer two main tiers: Starter for $97/mo and Pro for $297/mo. | What features are you looking for?").
 14. STRICT SHORTCUT BUTTON CONTROL: You must leave the "suggested_shortcuts" array EMPTY [] by default. ONLY populate it if you are actively asking a multiple-choice question in the "reply" field. DO NOT repeat shortcuts on every turn.
-15. NO MARKDOWN FORMATTING: You must NEVER use asterisks (**bold**) or any other markdown formatting. Output pure, plain text only.`;
+15. NO MARKDOWN FORMATTING: You must NEVER use asterisks (**bold**) or any other markdown formatting. Output pure, plain text only.
+16. DIRECT CALENDAR BOOKING OVERRIDE: If the user explicitly asks to book a meeting and provides their Name, Email, and Phone Number, you MUST immediately trigger the calendar booking function/tool. Do NOT offer a callback unless the calendar tool explicitly fails.`;
 
   if (mode === "text") {
     instructions += `\n\nCURRENTLY COLLECTED DATA:\n${JSON.stringify(currentLeadData || {})}`;
@@ -353,7 +467,7 @@ Output strictly as a raw JSON object matching this schema. Note that 'business_c
   "flags": ["TRIGGER_CALLBACK", "TRIGGER_DATA_DELETION"],
   "analytics_events": [],
   "state": "string",
-  "next_action": "SCHEDULE_CONSULTATION | REQUEST_CALLBACK | NONE",
+  "next_action": "SCHEDULE_CONSULTATION | REQUEST_CALLBACK | NONE (CRITICAL: If the user explicitly asks to book a meeting and provides their Name, Email, and Phone Number, you MUST immediately trigger the calendar booking function/tool by setting next_action to 'SCHEDULE_CONSULTATION'. Do NOT offer a callback unless the calendar tool explicitly fails.)",
   "factual_summary": null
 }`;
   } else if (mode === "voice") {
@@ -363,7 +477,8 @@ Output strictly as a raw JSON object matching this schema. Note that 'business_c
 - PROGRESSIVE CAPTURE & PRIVACY: If a user refuses to provide a piece of information, accept it gracefully. Use 'record_privacy_preference' to log it. Offer an alternative path in a short spoken response.
 - CONCISE TURNS: Default to 1-3 short sentences maximum per turn. Never monologue. Maximum ONE question per turn.
 - CHUNK LONG EXPLANATIONS: Speak a short introductory part and explicitly ask whether the user wants to hear more.
-- STT CONFIRMATION PROTOCOL: You MUST explicitly verbally confirm Emails, Phone Numbers, Website URLs, and ZIP codes/Addresses before saving them.`;
+- STT CONFIRMATION PROTOCOL: You MUST explicitly verbally confirm Emails, Phone Numbers, Website URLs, and ZIP codes/Addresses before saving them.
+- DIRECT CALENDAR BOOKING: If the user explicitly asks to book a meeting and provides their Name, Email, and Phone Number, you MUST immediately trigger the calendar booking function/tool ('request_consultation'). Do NOT offer a callback unless the calendar tool explicitly fails.`;
   }
 
   return { instructions, botConfig };
