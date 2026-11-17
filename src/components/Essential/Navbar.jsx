@@ -1,7 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
+import { motion, AnimatePresence } from "framer-motion";
+import { scrollToTarget } from "./SmoothScroll";
 
 const navLinks = [
   { name: "How it works", href: "/#problem" },
@@ -11,44 +14,91 @@ const navLinks = [
   { name: "Straight answers", href: "/#faq" },
 ];
 
+export function BrandMark({ className = "brand__mark" }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 100 100"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        fill="var(--primary)"
+        d="M56.6,79.5c1.28-2.92,2.85-5.7,4.29-8.53q6.24-12.24,12.52-24.45c.14-.26.3-.5.51-.87l5.59,9.65L93.2,79a4.74,4.74,0,0,1,.24.51Z"
+      />
+      <path
+        fill="var(--foreground)"
+        d="M23.88,79.5a69.14,69.14,0,0,1,3.69-6.63Q38,54.81,48.42,36.77q4.52-7.79,9-15.57c.53-.93.87-.93,1.4,0,1.34,2.29,2.65,4.61,4,6.91a2,2,0,0,1-.4,1.28C56.81,39,51.36,48.67,45.83,58.3c-3.77,6.57-7.55,13.14-11.26,19.75a4.15,4.15,0,0,1-1.08,1.45Z"
+      />
+      <path
+        fill="var(--primary)"
+        d="M33.49,79.5c1.72-3.43,3.74-6.69,5.64-10q9-15.9,18.17-31.78c1.83-3.2,3.68-6.39,5.52-9.59,1.27,2.16,2.53,4.32,3.84,6.46.32.53,0,.86-.2,1.23Q61.74,44.19,57,52.57,49.59,65.66,42.2,78.76c-.13.23-.32.44-.24.74Z"
+      />
+      <path
+        fill="var(--foreground)"
+        d="M6.56,20.59H43.83L24.07,54.76C18.2,43.32,12.42,32,6.56,20.59Z"
+      />
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+    </svg>
+  );
+}
+
 export default function Navbar({ onOpenPopup }) {
+  const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
-  const [scrollProgress, setScrollProgress] = useState(0); // Holds a value from 0 to 1
+  const [isHidden, setIsHidden] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLight, setIsLight] = useState(true);
   const [activeSection, setActiveSection] = useState("");
+  const progressRef = useRef(null);
 
-  // Handle scroll effect & Smooth Scroll Progress Bar
+  // Glass on scroll, retract when reading down, return when scrolling up.
+  // Where CSS scroll timelines are missing, the progress hairline is driven here, without re-rendering.
   useEffect(() => {
     let ticking = false;
+    let lastY = window.scrollY;
+    const cssTimeline =
+      typeof CSS !== "undefined" && CSS.supports && CSS.supports("animation-timeline: scroll()");
 
-    const updateScroll = () => {
-      const scrollY = window.scrollY;
-      setIsScrolled(scrollY > 20);
+    const update = () => {
+      const y = window.scrollY;
+      setIsScrolled(y > 20);
+      setIsHidden(y > 480 && y > lastY + 4);
+      if (y < lastY - 4 || y < 480) setIsHidden(false);
+      lastY = y;
 
-      // Calculate scroll progress (0 to 1)
-      const docHeight =
-        document.documentElement.scrollHeight -
-        document.documentElement.clientHeight;
-      if (docHeight > 0) {
-        setScrollProgress(scrollY / docHeight);
+      if (!cssTimeline && progressRef.current) {
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        progressRef.current.style.transform = `scaleX(${max > 0 ? y / max : 0})`;
       }
-
       ticking = false;
     };
 
-    const handleScroll = () => {
-      // Use requestAnimationFrame for buttery smooth 60fps/120fps updates
+    const onScroll = () => {
       if (!ticking) {
-        window.requestAnimationFrame(updateScroll);
+        window.requestAnimationFrame(update);
         ticking = true;
       }
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    updateScroll(); // Trigger once on mount
-
-    return () => window.removeEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    update();
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   // Sync toggle UI with saved preference
@@ -57,286 +107,201 @@ export default function Navbar({ onOpenPopup }) {
     setIsLight(savedTheme === "light");
   }, []);
 
-  // Intersection Observer to track active sections
+  // Track which section is in view
   useEffect(() => {
-    const observerOptions = {
-      root: null,
-      rootMargin: "-80px 0px -60% 0px",
-      threshold: 0,
-    };
-
-    const observerCallback = (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          setActiveSection(entry.target.id);
-        }
-      });
-    };
-
     const observer = new IntersectionObserver(
-      observerCallback,
-      observerOptions,
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) setActiveSection(entry.target.id);
+        });
+      },
+      { root: null, rootMargin: "-80px 0px -60% 0px", threshold: 0 },
     );
 
     navLinks.forEach((link) => {
-      const id = link.href.substring(2);
-      const element = document.getElementById(id);
+      const element = document.getElementById(link.href.substring(2));
       if (element) observer.observe(element);
     });
 
     return () => observer.disconnect();
   }, []);
 
+  // Escape closes the drawer
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    const onKey = (e) => e.key === "Escape" && setIsMobileMenuOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isMobileMenuOpen]);
+
   const toggleTheme = () => {
     const newTheme = isLight ? "dark" : "light";
-    localStorage.setItem("closeDesk-theme", newTheme);
-    setIsLight(newTheme === "light");
-    window.dispatchEvent(new Event("closeDesk-theme-change"));
+    const root = document.documentElement;
+
+    // Swap every colour in one frame: per-element colour transitions are switched off
+    // while the theme changes, so nothing keeps sliding after the switch.
+    const apply = () => {
+      root.classList.add("theme-switching");
+      try {
+        localStorage.setItem("closeDesk-theme", newTheme);
+      } catch (_) {}
+      setIsLight(newTheme === "light");
+      window.dispatchEvent(new Event("closeDesk-theme-change"));
+      void root.offsetWidth; // commit the new colours before transitions come back
+    };
+    const restoreTransitions = () => root.classList.remove("theme-switching");
+
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // No crossfade when unsupported, under reduced motion, or when the page is not painting frames
+    if (!document.startViewTransition || reduced || document.visibilityState !== "visible") {
+      apply();
+      requestAnimationFrame(restoreTransitions);
+      return;
+    }
+
+    // One short crossfade between the two finished states is the only motion
+    const transition = document.startViewTransition(apply);
+    transition.finished.finally(restoreTransitions);
   };
 
   const handleNavClick = (e, href) => {
     if (href.includes("#")) {
-      e.preventDefault();
-
       const targetId = href.split("#")[1];
       const elem = document.getElementById(targetId);
 
+      // On the home page, glide; elsewhere let the link route to /#section.
       if (elem) {
+        e.preventDefault();
         setActiveSection(targetId);
-        const navHeight = 80;
-        const elementPosition = elem.getBoundingClientRect().top;
-        const offsetPosition = elementPosition + window.scrollY - navHeight;
-
-        window.scrollTo({
-          top: offsetPosition,
-          behavior: "smooth",
-        });
+        if (targetId === "top") scrollToTarget(0);
+        else scrollToTarget(elem);
+        if (window.history?.replaceState) window.history.replaceState(null, "", `#${targetId}`);
       }
     }
     setIsMobileMenuOpen(false);
   };
 
+  const handleClaim = () => {
+    setIsMobileMenuOpen(false);
+    if (onOpenPopup) {
+      onOpenPopup();
+      return;
+    }
+    router.push("/#founding25");
+  };
+
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-300 ${
-        isScrolled
-          ? "bg-[var(--background)]/80 backdrop-blur-xl border-b border-[var(--border-color)] shadow-sm py-3"
-          : "bg-transparent border-b border-transparent py-5"
-      }`}
+      className={`nav ${isScrolled ? "is-scrolled" : ""} ${isHidden && !isMobileMenuOpen ? "is-hidden" : ""}`}
+      aria-label="Main"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-6 relative">
-        {/* ================= BRAND LOGO ================= */}
+      <div className="wrap nav__row">
         <Link
           href="/#top"
           onClick={(e) => handleNavClick(e, "/#top")}
-          className="flex items-center gap-3 shrink-0 group"
+          className="brand"
+          aria-label="CloseDesk Home"
         >
-          <svg
-            id="Layer_1"
-            data-name="Layer 1"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 100 100"
-            className="w-10 h-10"
-          >
-            <path
-              fill="var(--primary)"
-              d="M56.6,79.5c1.28-2.92,2.85-5.7,4.29-8.53q6.24-12.24,12.52-24.45c.14-.26.3-.5.51-.87l5.59,9.65L93.2,79a4.74,4.74,0,0,1,.24.51Z"
-            />
-            <path
-              fill="var(--foreground)"
-              d="M23.88,79.5a69.14,69.14,0,0,1,3.69-6.63Q38,54.81,48.42,36.77q4.52-7.79,9-15.57c.53-.93.87-.93,1.4,0,1.34,2.29,2.65,4.61,4,6.91a2,2,0,0,1-.4,1.28C56.81,39,51.36,48.67,45.83,58.3c-3.77,6.57-7.55,13.14-11.26,19.75a4.15,4.15,0,0,1-1.08,1.45Z"
-            />
-            <path
-              fill="var(--primary)"
-              d="M33.49,79.5c1.72-3.43,3.74-6.69,5.64-10q9-15.9,18.17-31.78c1.83-3.2,3.68-6.39,5.52-9.59,1.27,2.16,2.53,4.32,3.84,6.46.32.53,0,.86-.2,1.23Q61.74,44.19,57,52.57,49.59,65.66,42.2,78.76c-.13.23-.32.44-.24.74Z"
-            />
-            <path
-              fill="var(--foreground)"
-              d="M6.56,20.59H43.83L24.07,54.76C18.2,43.32,12.42,32,6.56,20.59Z"
-            />
-          </svg>
-          <div className="flex items-baseline gap-2">
-            <span className="font-black text-xl tracking-tight text-[var(--foreground)] transition-colors group-hover:text-[var(--primary)]">
-              Close<em className="not-italic text-[var(--primary)]">Desk</em>
-            </span>
-            <span className="hidden sm:block font-mono text-[10px] text-[var(--foreground-muted)] tracking-widest uppercase">
-              by Aicyro
-            </span>
-          </div>
+          <BrandMark />
+          <span className="brand__word">
+            Close<span>Desk</span>
+          </span>
+          <span className="brand__by only-wide">by Aicyro</span>
         </Link>
 
-        {/* ================= DESKTOP LINKS ================= */}
-        <div className="hidden lg:flex items-center gap-8">
+        <ul className="nav__links only-wide">
           {navLinks.map((link) => {
             const isActive = activeSection === link.href.substring(2);
             return (
-              <a
-                key={link.name}
-                href={link.href}
-                onClick={(e) => handleNavClick(e, link.href)}
-                className={`text-sm transition-all duration-200 cursor-pointer ${
-                  isActive
-                    ? "text-[var(--primary)] font-bold drop-shadow-[0_0_8px_var(--primary)]"
-                    : "font-medium text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:drop-shadow-[0_0_8px_var(--primary)]"
-                }`}
-              >
-                {link.name}
-              </a>
+              <li key={link.name}>
+                <a
+                  href={link.href}
+                  onClick={(e) => handleNavClick(e, link.href)}
+                  className="nav__link"
+                  aria-current={isActive ? "true" : undefined}
+                >
+                  {link.name}
+                </a>
+              </li>
             );
           })}
-        </div>
+        </ul>
 
-        {/* ================= DESKTOP ACTIONS ================= */}
-        <div className="hidden lg:flex items-center gap-4 shrink-0">
+        <div className="nav__actions">
           <button
+            type="button"
             onClick={toggleTheme}
-            aria-label="Toggle theme"
-            className="relative w-10 h-10 flex items-center justify-center rounded-full bg-[var(--card-bg)] border border-[var(--border-color)] hover:border-[var(--primary)]/50 hover:bg-[var(--primary)]/10 transition-colors duration-300 overflow-hidden group"
+            aria-label="Toggle color theme"
+            className="icon-btn"
           >
-            <div className="relative flex items-center justify-center w-full h-full">
-              <svg
-                className={`absolute w-4 h-4 transition-all duration-500 ease-in-out ${
-                  isLight
-                    ? "opacity-100 rotate-0 scale-100 text-[var(--primary)]"
-                    : "opacity-0 -rotate-90 scale-50 text-[var(--foreground-muted)]"
-                }`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-                />
-              </svg>
-              <svg
-                className={`absolute w-4 h-4 transition-all duration-500 ease-in-out ${
-                  !isLight
-                    ? "opacity-100 rotate-0 scale-100 text-[var(--accent-blue)]"
-                    : "opacity-0 rotate-90 scale-50 text-[var(--foreground-muted)]"
-                }`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-                />
-              </svg>
-            </div>
+            <span className="theme-icon" data-on={isLight ? "true" : "false"}>
+              <SunIcon />
+            </span>
+            <span className="theme-icon" data-on={!isLight ? "true" : "false"}>
+              <MoonIcon />
+            </span>
           </button>
 
-          <button
-            onClick={onOpenPopup}
-            className="px-5 py-2.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-[#ffffff] text-sm font-bold rounded-xl transition-all duration-300 ease-out shadow-[0_4px_14px_var(--lead-glow)] hover:shadow-[0_6px_20px_var(--lead-glow)] hover:-translate-y-0.5"
-          >
+          <button type="button" onClick={handleClaim} className="btn btn--sm only-wide">
             Claim a Spot
           </button>
-        </div>
-
-        {/* ================= MOBILE CONTROLS ================= */}
-        <div className="flex items-center gap-3 lg:hidden shrink-0">
-          <button
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-            className="w-9 h-9 flex items-center justify-center rounded-lg bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--foreground)]"
-          >
-            {isLight ? (
-              <svg
-                className="w-4 h-4 text-[var(--primary)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-                />
-              </svg>
-            ) : (
-              <svg
-                className="w-4 h-4 text-[var(--accent-blue)]"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-                />
-              </svg>
-            )}
-          </button>
 
           <button
+            type="button"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            aria-label="Toggle menu"
-            className="w-9 h-9 flex flex-col items-center justify-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--card-bg)]"
+            aria-label="Toggle navigation menu"
+            aria-expanded={isMobileMenuOpen}
+            aria-controls="nav-drawer"
+            className="icon-btn burger only-narrow"
           >
-            <span
-              className={`w-4 h-[2px] bg-[var(--foreground)] rounded-full transition-transform duration-300 ${isMobileMenuOpen ? "rotate-45 translate-y-[4px]" : ""}`}
-            ></span>
-            <span
-              className={`w-4 h-[2px] bg-[var(--foreground)] rounded-full transition-transform duration-300 ${isMobileMenuOpen ? "-rotate-45 -translate-y-[4px]" : ""}`}
-            ></span>
+            <span />
+            <span />
           </button>
         </div>
       </div>
 
-      {/* ================= BUTTERY SMOOTH SCROLL TRACK BAR ================= */}
-      <div className="absolute bottom-0 left-0 w-full h-[2px] bg-transparent">
-        <div
-          className="h-full w-full bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] origin-left will-change-transform"
-          style={{ transform: `scaleX(${scrollProgress})` }}
-        />
-      </div>
+      <div className="progress" ref={progressRef} aria-hidden="true" />
 
-      {/* ================= MOBILE DROPDOWN MENU ================= */}
-      <div
-        className={`lg:hidden absolute top-full left-0 w-full bg-[var(--background)]/95 backdrop-blur-xl border-b border-[var(--border-color)] transition-all duration-300 overflow-hidden ${
-          isMobileMenuOpen ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"
-        }`}
-      >
-        <div className="px-4 py-4 flex flex-col gap-2">
-          {navLinks.map((link) => {
-            const isActive = activeSection === link.href.substring(2);
-            return (
-              <a
-                key={link.name}
-                href={link.href}
-                onClick={(e) => handleNavClick(e, link.href)}
-                className={`px-4 py-3 text-sm rounded-xl transition-colors border cursor-pointer ${
-                  isActive
-                    ? "text-[var(--primary)] font-bold bg-[var(--card-bg)] border-[var(--border-color)]"
-                    : "font-medium text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--card-bg)] border-transparent hover:border-[var(--border-color)]"
-                }`}
-              >
-                {link.name}
-              </a>
-            );
-          })}
-          <div className="pt-4 mt-2 border-t border-[var(--grid-line)] px-2">
-            <button
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                onOpenPopup();
-              }}
-              className="w-full py-3.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-[#ffffff] text-sm font-bold rounded-xl transition-all duration-300 shadow-md"
-            >
-              Claim a Founding 25 Spot
-            </button>
-          </div>
-        </div>
-      </div>
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <motion.div
+            id="nav-drawer"
+            className="drawer only-narrow"
+            style={{ flexDirection: "column", transformOrigin: "top" }}
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0, transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } }}
+            exit={{ opacity: 0, y: -8, transition: { duration: 0.2, ease: [0.7, 0, 0.84, 0] } }}
+          >
+            <div className="wrap">
+              <ul>
+                {navLinks.map((link, i) => {
+                  const isActive = activeSection === link.href.substring(2);
+                  return (
+                    <motion.li
+                      key={link.name}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0, transition: { delay: 0.04 + i * 0.04, duration: 0.3, ease: [0.16, 1, 0.3, 1] } }}
+                    >
+                      <a
+                        href={link.href}
+                        onClick={(e) => handleNavClick(e, link.href)}
+                        aria-current={isActive ? "true" : undefined}
+                      >
+                        {link.name}
+                      </a>
+                    </motion.li>
+                  );
+                })}
+              </ul>
+              <div className="drawer__cta">
+                <button type="button" onClick={handleClaim} className="btn btn--block">
+                  Claim a Founding 25 Spot
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </nav>
   );
 }

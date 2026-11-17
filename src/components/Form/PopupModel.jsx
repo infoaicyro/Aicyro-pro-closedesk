@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { ref, push, update, serverTimestamp } from "firebase/database";
-import { db } from "@/lib/firebase";
+import {
+  submitFoundingApplication,
+  submitFoundingSegmentation,
+} from "@/lib/foundingApplicationClient";
 
 export default function PopupModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -101,22 +103,8 @@ export default function PopupModal() {
     setSubmitError("");
 
     try {
-      const applicationsRef = ref(db, "founding_applications");
-      const newLeadRef = await push(applicationsRef, {
-        type: "founding-25-application",
-        name: formData.name,
-        business: formData.business,
-        website: formData.website,
-        phone: formData.phone,
-        email: formData.email,
-        industry: formData.industry,
-        source: "auto_popup",
-        page: window.location.href,
-        status: "new",
-        timestamp: serverTimestamp(),
-      });
-
-      setDbRef(newLeadRef);
+      const reference = await submitFoundingApplication(formData, "auto_popup");
+      setDbRef(reference);
       setStep(2);
     } catch (error) {
       console.error("Submission failed:", error);
@@ -133,10 +121,7 @@ export default function PopupModal() {
 
     try {
       if (dbRef) {
-        await update(dbRef, {
-          segmentationAnswer: segmentationAnswer,
-          segmentationTimestamp: serverTimestamp(),
-        });
+        await submitFoundingSegmentation(dbRef, segmentationAnswer);
       }
 
       setStep(3);
@@ -205,7 +190,7 @@ export default function PopupModal() {
                   Claim a Founding 25 Spot
                 </h3>
                 <p className="text-xs sm:text-sm text-[var(--foreground-muted)] leading-relaxed">
-                  We're opening CloseDesk to the first 25 field-service
+                  We&apos;re opening CloseDesk to the first 25 field-service
                   businesses. Done-for-you setup, founder pricing, 60-day
                   optimization.
                 </p>

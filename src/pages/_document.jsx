@@ -13,6 +13,7 @@ export default function Document() {
           dangerouslySetInnerHTML={{
             __html: `
               (function () {
+                document.documentElement.classList.add("js");
                 try {
                   var path = window.location.pathname || "";
                   if (path.indexOf("/lg") === 0) return;

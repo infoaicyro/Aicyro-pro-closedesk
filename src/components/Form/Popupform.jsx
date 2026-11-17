@@ -1,6 +1,11 @@
+"use client";
+
 import React, { useEffect, useState } from "react";
-import { ref, push, update, serverTimestamp } from "firebase/database";
-import { db } from "@/lib/firebase";
+import {
+  submitFoundingApplication,
+  submitFoundingSegmentation,
+} from "@/lib/foundingApplicationClient";
+import { CheckCircle2, ArrowRight, X, Sparkles, Building2, Globe, Phone, Mail, User } from "lucide-react";
 
 export default function Popupform({ isOpen, onClose }) {
   const [mounted, setMounted] = useState(false);
@@ -91,221 +96,217 @@ export default function Popupform({ isOpen, onClose }) {
     setSubmitError("");
 
     try {
-      const applicationsRef = ref(db, "founding_applications");
-      const newLeadRef = await push(applicationsRef, {
-        type: "founding-25-application",
-        name: formData.name,
-        business: formData.business,
-        website: formData.website,
-        phone: formData.phone,
-        email: formData.email,
-        industry: formData.industry,
-        page: window.location.href,
-        status: "new",
-        timestamp: serverTimestamp(),
-      });
+      const reference = await submitFoundingApplication(formData, "desktop_modal");
 
-      // Save reference to update in the next step
-      setDbRef(newLeadRef);
-      setStep(2);
-    } catch (error) {
-      console.error("Submission failed:", error);
-      setSubmitError("Something went wrong — email us at info@aicyro.com");
-    } finally {
+      // Save the server reference to append segmentation in step 2
+      setDbRef(reference);
       setIsSubmitting(false);
+      setStep(2);
+    } catch (err) {
+      console.error("Firebase submit error:", err);
+      setIsSubmitting(false);
+      setSubmitError("Could not submit your application. Please check connection and try again.");
     }
   };
 
-  // 3. Segmentation Submit (Updates the existing Firebase record)
+  // 3. Segmentation Form Submit (Appends to Firebase record)
   const handleSegmentationSubmit = async (e) => {
     e.preventDefault();
+    if (!dbRef) {
+      setStep(3);
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError("");
 
     try {
-      if (dbRef) {
-        await update(dbRef, {
-          segmentationAnswer: segmentationAnswer,
-          segmentationTimestamp: serverTimestamp(),
-        });
-      }
+      await submitFoundingSegmentation(dbRef, segmentationAnswer);
 
-      setStep(3);
-      setTimeout(() => {
-        onClose();
-        setFormData({
-          name: "",
-          business: "",
-          website: "",
-          phone: "",
-          email: "",
-          industry: "",
-        });
-      }, 2000);
-    } catch (error) {
-      console.error("Segmentation submission failed:", error);
-      setSubmitError("Something went wrong — email us at info@aicyro.com");
-    } finally {
       setIsSubmitting(false);
+      setStep(3);
+    } catch (err) {
+      console.error("Firebase update error:", err);
+      setIsSubmitting(false);
+      // Still allow them to see success
+      setStep(3);
     }
   };
 
-  const inputClass = (fieldId) =>
-    `w-full bg-[var(--background)] border rounded-xl text-[var(--foreground)] px-4 py-3 text-sm focus:outline-none transition-all shadow-inner ${
-      errors[fieldId]
-        ? "border-red-500 focus:border-red-500 focus:ring-1 focus:ring-red-500/50"
-        : "border-[var(--border-color)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/50"
-    }`;
+  if (!isOpen || !mounted) return null;
 
-  if (!mounted) return null;
+  const inputClass = (fieldId) =>
+    `w-full bg-[var(--background)] border ${
+      errors[fieldId] ? "border-[var(--logo-politico-red)]" : "border-[var(--border-color)]"
+    } rounded-xl text-[var(--foreground)] px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors duration-150 placeholder:text-[var(--foreground-muted)]/70`;
 
   return (
-    <>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
+      {/* Blurred Backdrop */}
       <div
-        className={`fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 transition-all duration-500 ease-out bg-[#030810]/70 backdrop-blur-md ${
-          isOpen
-            ? "opacity-100 visible"
-            : "opacity-0 invisible pointer-events-none"
-        }`}
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200"
         onClick={onClose}
-      >
-        {/* Added m-auto and 85dvh for perfect responsive centering */}
-        <div
-          className={`relative w-full max-w-lg max-h-[85dvh] sm:max-h-[90vh] m-auto overflow-y-auto bg-[var(--card-bg)] border border-[var(--primary)]/30 rounded-2xl p-5 sm:p-8 shadow-[0_40px_90px_rgba(0,0,0,0.6),_0_0_44px_rgba(45,217,232,0.08)] transform transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
-            isOpen
-              ? "scale-100 translate-y-0 opacity-100"
-              : "scale-95 translate-y-8 opacity-0"
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
+        aria-hidden="true"
+      />
+
+      {/* Modal Surface */}
+      <div className="relative w-full max-w-xl bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl shadow-sm z-10 overflow-hidden my-auto transition-transform duration-200">
+        
+        {/* Top Accent Strip */}
+        <div className="h-1.5 w-full bg-[var(--primary)]" />
+
+        {/* Modal Header & Close Button */}
+        <div className="p-6 sm:p-8">
           <button
             onClick={onClose}
-            className="absolute top-3 right-3 sm:top-4 sm:right-4 w-8 h-8 flex items-center justify-center rounded-lg border border-[var(--border-color)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:border-[var(--primary)] transition-colors duration-200 z-10 bg-[var(--card-bg)] sm:bg-transparent"
+            className="absolute top-5 right-5 p-2 rounded-xl text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--background)] border border-transparent hover:border-[var(--border-color)] transition-colors duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--primary)]"
             aria-label="Close modal"
           >
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
 
+          {/* STEP 1: Main Application */}
           {step === 1 && (
-            <>
-              <div className="mb-5 sm:mb-6 pr-6 sm:pr-0">
-                <span className="block text-[10px] sm:text-xs font-mono text-[var(--primary)] uppercase tracking-widest mb-2 drop-shadow-[0_0_12px_rgba(138,43,226,0.3)]">
-                  Founding 25 Launch Program
-                </span>
-                <h3 className="text-xl sm:text-3xl font-black text-[var(--foreground)] tracking-tight mb-2 sm:mb-3">
+            <div>
+              <div className="mb-6 pr-6">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--background)] border border-[var(--border-color)] mb-3">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)]" aria-hidden="true" />
+                  <span className="text-xs font-semibold text-[var(--foreground)]">
+                    Founding 25 Launch Program
+                  </span>
+                </div>
+                <h2
+                  id="modal-title"
+                  className="text-2xl sm:text-3xl font-bold text-[var(--foreground)] tracking-tight leading-tight mb-2"
+                >
                   Claim a Founding 25 Spot
-                </h3>
+                </h2>
                 <p className="text-xs sm:text-sm text-[var(--foreground-muted)] leading-relaxed">
-                  We're opening CloseDesk to the first 25 field-service
-                  businesses. Done-for-you setup, founder pricing, 60-day
-                  optimization.
+                  We are opening CloseDesk to the first 25 field-service businesses. Done-for-you setup, locked-in founder pricing, and 60-day direct optimization.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4 mb-5 sm:mb-6">
+              {/* Inclusions Checklist */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-6 p-4 rounded-xl bg-[var(--background)] border border-[var(--border-color)]">
                 {[
-                  "Done-for-you setup",
-                  "Custom service-specific AI flow",
-                  "Lead capture + qualification",
-                  "Booking/request flow",
-                  "Pulse dashboard access",
-                  "60-day optimization",
-                ].map((bullet, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-2 text-[12px] sm:text-[13px] text-[var(--foreground-muted)]"
-                  >
-                    <span className="font-mono text-teal-500 font-bold shrink-0">
-                      ✓
-                    </span>
-                    <span>{bullet}</span>
+                  "Done-for-you turnkey setup",
+                  "Custom trade-specific AI flow",
+                  "Lead capture and triage (< 1.2s)",
+                  "Technician calendar sync",
+                  "Full desk telemetry access",
+                  "60-day performance warranty",
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs font-medium text-[var(--foreground)]">
+                    <CheckCircle2 size={14} className="text-[var(--primary)] shrink-0" aria-hidden="true" />
+                    <span>{item}</span>
                   </div>
                 ))}
               </div>
 
-              <form
-                className="space-y-3 sm:space-y-4"
-                onSubmit={handleMainSubmit}
-                noValidate
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              {/* Form Fields */}
+              <form onSubmit={handleMainSubmit} className="space-y-3.5" noValidate>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="name" className="block text-xs font-medium text-[var(--foreground-muted)] mb-1">
+                      Your Name
+                    </label>
+                    <input
+                      type="text"
+                      id="name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      placeholder="e.g. John Miller"
+                      className={inputClass("name")}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="business" className="block text-xs font-medium text-[var(--foreground-muted)] mb-1">
+                      Business Name
+                    </label>
+                    <input
+                      type="text"
+                      id="business"
+                      value={formData.business}
+                      onChange={handleChange}
+                      placeholder="e.g. Miller Plumbing & HVAC"
+                      className={inputClass("business")}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="website" className="block text-xs font-medium text-[var(--foreground-muted)] mb-1">
+                    Website URL
+                  </label>
                   <input
-                    type="text"
-                    id="name"
-                    value={formData.name}
+                    type="url"
+                    id="website"
+                    value={formData.website}
                     onChange={handleChange}
-                    placeholder="Name"
-                    className={inputClass("name")}
-                  />
-                  <input
-                    type="text"
-                    id="business"
-                    value={formData.business}
-                    onChange={handleChange}
-                    placeholder="Business Name"
-                    className={inputClass("business")}
+                    onBlur={handleWebsiteBlur}
+                    placeholder="https://example.com"
+                    className={inputClass("website")}
                   />
                 </div>
 
-                <input
-                  type="url"
-                  id="website"
-                  value={formData.website}
-                  onChange={handleChange}
-                  onBlur={handleWebsiteBlur}
-                  placeholder="Website URL"
-                  className={inputClass("website")}
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <input
-                    type="tel"
-                    id="phone"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    placeholder="Phone Number"
-                    className={inputClass("phone")}
-                  />
-                  <input
-                    type="email"
-                    id="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    placeholder="Email Address"
-                    className={inputClass("email")}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="phone" className="block text-xs font-medium text-[var(--foreground-muted)] mb-1">
+                      Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      id="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      placeholder="(555) 000-0000"
+                      className={inputClass("phone")}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="email" className="block text-xs font-medium text-[var(--foreground-muted)] mb-1">
+                      Work Email
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      placeholder="john@example.com"
+                      className={inputClass("email")}
+                    />
+                  </div>
                 </div>
 
-                <select
-                  id="industry"
-                  value={formData.industry}
-                  onChange={handleChange}
-                  className={`${inputClass("industry")} appearance-none cursor-pointer`}
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238FA5BE'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                    backgroundRepeat: "no-repeat",
-                    backgroundPosition: "right 1rem center",
-                    backgroundSize: "1.2em",
-                  }}
-                >
-                  <option
-                    value=""
-                    disabled
-                    className="text-[var(--foreground-muted)]"
+                <div>
+                  <label htmlFor="industry" className="block text-xs font-medium text-[var(--foreground-muted)] mb-1">
+                    Primary Service Trade
+                  </label>
+                  <select
+                    id="industry"
+                    value={formData.industry}
+                    onChange={handleChange}
+                    className={`${inputClass("industry")} cursor-pointer`}
                   >
-                    Select your industry…
-                  </option>
-                  <option value="hvac">HVAC</option>
-                  <option value="plumbing">Plumbing</option>
-                  <option value="restoration">Restoration</option>
-                  <option value="roofing">Roofing</option>
-                  <option value="pest-control">Pest Control</option>
-                  <option value="electrical">Electrical</option>
-                  <option value="other">Other</option>
-                </select>
+                    <option value="" disabled>Select your trade…</option>
+                    <option value="hvac">HVAC</option>
+                    <option value="plumbing">Plumbing</option>
+                    <option value="restoration">Restoration & Water Mitigation</option>
+                    <option value="roofing">Roofing</option>
+                    <option value="pest-control">Pest Control</option>
+                    <option value="electrical">Electrical</option>
+                    <option value="appliance">Appliance Repair</option>
+                    <option value="other">Other Field Service</option>
+                  </select>
+                </div>
 
                 {submitError && (
-                  <p className="text-red-500 text-sm font-semibold mt-2">
+                  <p className="text-xs font-semibold text-[var(--logo-politico-red)] pt-1">
                     {submitError}
                   </p>
                 )}
@@ -313,27 +314,27 @@ export default function Popupform({ isOpen, onClose }) {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`w-full mt-4 px-6 py-3.5 sm:py-4 bg-gradient-to-r from-[var(--primary)] to-[var(--accent-blue)] text-white font-black rounded-xl transition-all duration-300 ease-out text-sm sm:text-base shadow-[0_8px_28px_rgba(45,217,232,0.25)] ${
-                    isSubmitting
-                      ? "opacity-70 cursor-not-allowed"
-                      : "hover:shadow-[0_12px_34px_rgba(45,217,232,0.4)] hover:-translate-y-0.5"
-                  }`}
+                  className="w-full mt-3 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-[var(--primary)] hover:bg-[var(--secondary)] text-[var(--color-accent-ink)] font-bold rounded-xl shadow-xs transition-colors duration-150 motion-safe:transition-transform motion-safe:hover:-translate-y-0.5 text-base cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap"
                 >
-                  {isSubmitting
-                    ? "Submitting Request..."
-                    : "Claim a Founding 25 Spot"}
+                  <span>{isSubmitting ? "Submitting Application..." : "Claim a Founding 25 Spot"}</span>
+                  <ArrowRight size={17} className="shrink-0" aria-hidden="true" />
                 </button>
               </form>
-            </>
+            </div>
           )}
 
+          {/* STEP 2: Segmentation Question */}
           {step === 2 && (
-            <div className="py-4 sm:py-6 animate-[fadeArea_0.5s_ease-in_forwards]">
-              <h3 className="text-xl sm:text-2xl font-black text-[var(--foreground)] mb-2 sm:mb-4">
-                Almost done!
-              </h3>
-              <p className="text-xs sm:text-sm text-[var(--foreground-muted)] mb-4 sm:mb-6">
-                What do you want more of from your business?
+            <div className="py-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--primary)]/10 text-[var(--primary)] text-xs font-semibold mb-3">
+                <Sparkles size={13} aria-hidden="true" />
+                <span>Step 2 of 2: Customization</span>
+              </div>
+              <h2 className="text-2xl font-bold text-[var(--foreground)] tracking-tight mb-2">
+                Almost done! What is your biggest lead challenge?
+              </h2>
+              <p className="text-xs sm:text-sm text-[var(--foreground-muted)] mb-5 leading-relaxed">
+                Tell us what you want more of from your website so we can configure your live desk prototype before our review call.
               </p>
 
               <form onSubmit={handleSegmentationSubmit} className="space-y-4">
@@ -345,75 +346,66 @@ export default function Popupform({ isOpen, onClose }) {
                     setSegmentationAnswer(e.target.value);
                     setSubmitError("");
                   }}
-                  placeholder="E.g., More qualified leads, saving time on callbacks..."
-                  className="w-full bg-[var(--background)] border border-[var(--border-color)] rounded-xl text-[var(--foreground)] px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]/50 transition-all shadow-inner"
+                  placeholder="e.g. Capturing after-hours emergencies, pre-qualifying homeowners before driving out, cutting callback lag..."
+                  className="w-full bg-[var(--background)] border border-[var(--border-color)] rounded-xl text-[var(--foreground)] px-4 py-3 text-sm focus:outline-none focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] transition-colors duration-150 placeholder:text-[var(--foreground-muted)]/70 resize-none"
                 />
 
-                {submitError && (
-                  <p className="text-red-500 text-sm font-semibold">
-                    {submitError}
-                  </p>
-                )}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-[var(--primary)] hover:bg-[var(--secondary)] text-[var(--color-accent-ink)] font-bold rounded-xl shadow-xs transition-colors duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap"
+                  >
+                    <span>{isSubmitting ? "Saving Preferences..." : "Complete Application"}</span>
+                    <ArrowRight size={16} aria-hidden="true" />
+                  </button>
 
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !segmentationAnswer.trim()}
-                  className={`w-full px-6 py-3.5 sm:py-4 bg-gradient-to-r from-[var(--primary)] to-[var(--accent-blue)] text-white font-black rounded-xl transition-all duration-300 ease-out text-sm sm:text-base ${
-                    isSubmitting || !segmentationAnswer.trim()
-                      ? "opacity-70 cursor-not-allowed"
-                      : "hover:shadow-[0_12px_34px_rgba(45,217,232,0.4)] hover:-translate-y-0.5"
-                  }`}
-                >
-                  {isSubmitting ? "Submitting..." : "Complete Application"}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setStep(3)}
+                    className="px-4 py-3.5 text-xs font-semibold text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors duration-150 cursor-pointer"
+                  >
+                    Skip
+                  </button>
+                </div>
               </form>
             </div>
           )}
 
+          {/* STEP 3: Success Confirmation */}
           {step === 3 && (
-            <div className="py-8 sm:py-10 flex flex-col items-center justify-center text-center animate-[fadeArea_0.5s_ease-in_forwards]">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center mb-4">
-                <svg
-                  className="w-7 h-7 sm:w-8 sm:h-8 text-green-500"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="3"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
+            <div className="py-4 text-center">
+              <div className="w-14 h-14 rounded-full bg-[var(--primary)]/10 border border-[var(--primary)]/20 text-[var(--primary)] flex items-center justify-center mx-auto mb-4">
+                <CheckCircle2 size={30} aria-hidden="true" />
               </div>
-              <h4 className="text-lg sm:text-xl font-bold text-[var(--foreground)] mb-2">
-                Application Received
-              </h4>
-              <p className="text-xs sm:text-sm text-[var(--foreground-muted)]">
-                We will be in touch shortly to discuss your setup.
+
+              <h2 className="text-2xl font-bold text-[var(--foreground)] tracking-tight mb-2">
+                Founding Spot Application Received
+              </h2>
+
+              <p className="text-xs sm:text-sm text-[var(--foreground-muted)] mb-6 max-w-sm mx-auto leading-relaxed">
+                Thank you for applying. We are currently verifying the 25 cohort openings. Our team will review your website and reach out via email within 24 hours.
               </p>
+
+              <div className="p-4 rounded-xl bg-[var(--background)] border border-[var(--border-color)] text-xs text-[var(--foreground-muted)] text-left mb-6 space-y-1.5">
+                <div className="font-semibold text-[var(--foreground)]">Next Steps:</div>
+                <div>1. We run an automated lead flow audit on your site URL.</div>
+                <div>2. We configure a live demo booking desk for your trade.</div>
+                <div>3. You receive an invitation link to review your desk.</div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full inline-flex items-center justify-center px-6 py-3 bg-[var(--card-bg)] hover:bg-[var(--background)] text-[var(--foreground)] font-semibold rounded-xl border border-[var(--border-color)] transition-colors duration-150 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]"
+              >
+                Close Window
+              </button>
             </div>
           )}
+
         </div>
       </div>
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `@keyframes fadeArea { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-          
-          .overflow-y-auto::-webkit-scrollbar {
-            width: 6px;
-          }
-          .overflow-y-auto::-webkit-scrollbar-track {
-            background: transparent;
-          }
-          .overflow-y-auto::-webkit-scrollbar-thumb {
-            background-color: var(--border-color);
-            border-radius: 10px;
-          }
-          `,
-        }}
-      />
-    </>
+    </div>
   );
 }

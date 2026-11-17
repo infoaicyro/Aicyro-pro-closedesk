@@ -1,24 +1,22 @@
+// src/pages/layout.jsx
 import { useRouter } from "next/router";
-import AicyroChatbot from "@/components/Chatbot/AicyroChatbot";
+import AicyroChatbot from "@/Closedesk/Chatbot/AicyroChatbot";
+import { isInternalPath } from "@/lib/routeScopes";
+
+// The marketing site is Aicyro's own (default) tenant.
+const SITE_TENANT_ID = "default";
 
 export default function RootLayout({ children }) {
   const router = useRouter();
 
-  // Check if the current page is the admin dashboard (/lg) or the logs page (/logs)
-  const isDashboard = router.pathname === "/lg";
-  const isLogsPage = router.pathname === "/logs";
-
-  // Hide the chatbot if on the dashboard OR the logs page
-  const showChatbot = !isDashboard && !isLogsPage;
+  // Show the multi-tenant chatbot on public pages only (never on the dashboard,
+  // logs, embeds that render their own chatbot, or reports).
+  const showChatbot = !isInternalPath(router.pathname);
 
   return (
-    <div>
-      <main>
-        {children}
-
-        {/* Only render the chatbot on public/allowed pages */}
-        {showChatbot && <AicyroChatbot />}
-      </main>
-    </div>
+    <>
+      {children}
+      {showChatbot && <AicyroChatbot tenantId={SITE_TENANT_ID} />}
+    </>
   );
 }

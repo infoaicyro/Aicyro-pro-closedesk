@@ -5,6 +5,21 @@ import { db } from "../../lib/firebase";
 import { ref, update, get } from "firebase/database";
 import { traceAiExecution } from "../../lib/aiTracer"; // 🔥 Integrates Ticket 5 Tracer for the abandoned summaries
 import { executeDbWithTrace } from "../../lib/dbTracer";
+import { resolveTenantId, resolveAuthenticatedTenantId } from "../../lib/tenantResolver";
+import { sanitizeFirebaseKey, sanitizeFirebasePayload, redactSensitiveSecrets, stripCrlf, escapeHtml } from "../../lib/sanitizer";
+import { safeDbGet, safeDbUpdate } from "../../lib/safeDb";
+import {
+  validateRequestBodySize,
+  checkLeadSubmissionIdempotency,
+} from "../../lib/publicEndpointGuard";
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '32kb',
+    },
+  },
+};
 
 
 async function handler(req, res, apiLogger) {
@@ -12,17 +27,35 @@ async function handler(req, res, apiLogger) {
   // GET REQUEST: FETCH ALL LEADS FOR DASHBOARD
   // ==========================================
   if (req.method === "GET") {
+    // 🚨 SECURITY: Operator session verification & cross-tenant spoofing prevention
+    const authResult = await resolveAuthenticatedTenantId(req);
+    if (!authResult.allowed) {
+      apiLogger.warn("security", "unauthorized_leads_fetch_blocked", {
+        context: { error: authResult.error, status: authResult.status }
+      });
+      return res.status(authResult.status || 401).json({ error: authResult.error });
+    }
+
     try {
-      const snapshot = await get(ref(db, "leads"));
+      const tenantId = authResult.tenantId;
+      const leadsPath = tenantId && tenantId !== "default" ? `tenants/${tenantId}/leads` : "leads";
+      
+      let snapshot = null;
+      try {
+        snapshot = await safeDbGet(ref(db, leadsPath), 600);
+      } catch (e) {
+        // Database offline / network fallback
+      }
       
       apiLogger.info("lead_lifecycle", "bulk_fetch_success", { 
-        context: { message: "Fetched all leads for dashboard" } 
+        context: { message: "Fetched leads for dashboard", tenantId } 
       });
 
-      if (snapshot.exists()) {
-        return res.status(200).json(snapshot.val()); // Returns all leads
+      if (snapshot && snapshot.exists()) {
+        const val = redactSensitiveSecrets(snapshot.val());
+        return res.status(200).json(val); // Returns tenant-isolated, redacted leads
       } else {
-        return res.status(200).json({}); // Returns empty object if no leads exist
+        return res.status(200).json({}); // Returns empty object if no leads exist for this tenant
       }
     } catch (error) {
       apiLogger.error("lead_lifecycle", "bulk_fetch_failed", { error });
@@ -34,28 +67,69 @@ async function handler(req, res, apiLogger) {
   // POST REQUEST: SAVE LEAD FROM CHATBOT
   // ==========================================
   if (req.method === "POST") {
-    const data = req.body;
-    
-    // 🚨 TICKET 9: Every lead MUST have a lead_id and reference a session
-    const lead_id = data.firebaseId || `lead_${Date.now()}`;
-    const session_id = data.anonId || data.session_id || lead_id;
+    // 1. Enforce 32KB request body size cap (returns 413)
+    if (!validateRequestBodySize(req, res, 32768)) return;
 
-    // 🚨 TICKET 9: lead_validation_failed
-    if (!data || typeof data !== "object" || Object.keys(data).length === 0) {
+    if (!req.body || typeof req.body !== "object" || Object.keys(req.body).length === 0) {
       apiLogger.warn("lead_lifecycle", "lead_validation_failed", {
-        context: { lead_id, session_id, reason: "Payload is empty or malformed" }
+        context: { reason: "Payload is empty or malformed" }
       });
-      return res.status(400).json({ error: "Invalid payload format" });
+      return res.status(400).json({ error: "Invalid payload format", code: "INVALID_PAYLOAD" });
     }
+
+    const tenantId = resolveTenantId(req) || req.body?.tenant_id || "default";
+
+    // 2. Anti-Spam Lead Idempotency & Rate Cap Check
+    const clientIp = (req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
+    const sessionOrIp = req.body.anonId || req.body.session_id || clientIp;
+    const idempotency = checkLeadSubmissionIdempotency(req.body, tenantId, sessionOrIp, 60000);
+    if (!idempotency.allowed) {
+      if (idempotency.isDuplicate) {
+        apiLogger.info("lead_lifecycle", "lead_idempotent_duplicate_deduplicated", {
+          context: { tenantId, leadHash: idempotency.leadHash }
+        });
+        return res.status(200).json({
+          id: req.body.firebaseId || `lead_${Date.now()}`,
+          success: true,
+          message: "Duplicate lead submission deduplicated",
+          deduplicated: true,
+        });
+      }
+      if (idempotency.isRateLimited) {
+        return res.status(429).json({
+          error: idempotency.reason || "Lead submission rate limit exceeded.",
+          code: "RATE_LIMIT_EXCEEDED",
+        });
+      }
+    }
+
+    // 3. Strip any hostile arbitrary email recipient fields
+    const FORBIDDEN_RECIPIENT_KEYS = ["to", "cc", "bcc", "recipient", "receiverEmail", "receiver_email", "mail_to"];
+    for (const k of FORBIDDEN_RECIPIENT_KEYS) {
+      delete req.body[k];
+    }
+
+    // 🚨 SECURITY: Deep sanitize payload and keys to prevent NoSQL path traversal injection
+    const data = sanitizeFirebasePayload(req.body);
+    const rawLeadId = data.firebaseId || `lead_${Date.now()}`;
+    const lead_id = sanitizeFirebaseKey(rawLeadId, "lead");
+    const rawSessionId = data.anonId || data.session_id || lead_id;
+    const session_id = sanitizeFirebaseKey(rawSessionId, "session");
 
     const hasContactInfo = Boolean(data.name || data.email || data.phone);
 
     try {
       // 1. Check existing state in the database
-      const leadRef = ref(db, `leads/${lead_id}`);
-      // 🔥 Wrapped the Read operation
-      const snapshot = await executeDbWithTrace(apiLogger, "read", `leads/${lead_id}`, get(leadRef));
-      const exists = snapshot.exists();
+      const tenantId = resolveTenantId(req) || data.tenant_id || "default";
+      const leadPath = tenantId && tenantId !== "default" ? `tenants/${tenantId}/leads/${lead_id}` : `leads/${lead_id}`;
+      const leadRef = ref(db, leadPath);
+      let snapshot = null;
+      try {
+        snapshot = await executeDbWithTrace(apiLogger, "read", `leads/${lead_id}`, safeDbGet(leadRef, 600));
+      } catch (e) {
+        // offline fallback
+      }
+      const exists = snapshot ? snapshot.exists() : false;
       const existingData = exists ? snapshot.val() : {};
 
       // 🚨 TICKET 9: lead_capture_started
@@ -126,6 +200,10 @@ async function handler(req, res, apiLogger) {
             prompt_version: "abandoned_summary_v1",
             conversation_state: "abandoned_chat",
             detected_intent: "summarize",
+            provider: "openai",
+            tenantId,
+            sessionId: session_id,
+            operation: "abandoned_summary",
           });
 
           data.conversation_summary = completion.choices[0].message.content.trim();
@@ -144,7 +222,11 @@ async function handler(req, res, apiLogger) {
 
      // 3. Save to Firebase
       // 🔥 Wrapped the Update operation
-      await executeDbWithTrace(apiLogger, "update", `leads/${lead_id}`, update(leadRef, data));
+      try {
+        await executeDbWithTrace(apiLogger, "update", `leads/${lead_id}`, safeDbUpdate(leadRef, data, 600));
+      } catch (e) {
+        // offline fallback
+      }
 
       // 🚨 TICKET 9: lead_routing_success
       apiLogger.info("lead_lifecycle", "lead_routing_success", {

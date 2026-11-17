@@ -1,0 +1,151 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: brand · redesign: full · component: chatbot widget
+ * paper: var(--background) per tenant theme · accent: #8a2be2 (brand default, every tenant hue kept) · display: Bricolage Grotesque (wordmark only) · body: Instrument Sans
+ * axes: light/grotesk-sans/chromatic-violet · posture: restrained · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V3 · weakest: V, a support widget is a familiar shape; kept it familiar on purpose so visitors on any client site read it at once */
+
+/* The CloseDesk chat widget (AicyroChatbot.jsx). Everything here is scoped under .cdw,
+   the widget root, and uses only the role tokens from tokens.css and closedesk.css,
+   so the tenant theme (mode, hue, shade) repaints it. Keyframes run only when the
+   visitor has not asked for reduced motion; under reduce everything is static. */
+
+/* ------------------------------------------------------------- surfaces */
+
+.cdw .cdw-lift {
+  box-shadow: var(--shadow-lift);
+}
+
+@media (min-width: 640px) {
+  .cdw .cdw-panel {
+    box-shadow: var(--shadow-lift);
+  }
+}
+
+/* ------------------------------------------------------------- focus */
+
+.cdw .cdw-focus:focus-visible,
+.cdw .cdw-menu-item:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.cdw .cdw-focus:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ------------------------------------------------------------- motion (state only) */
+
+@media (prefers-reduced-motion: no-preference) {
+  .cdw .cdw-enter {
+    animation: cdw-enter var(--dur-short) var(--ease-out) both;
+  }
+
+  .cdw .cdw-teaser {
+    animation: cdw-rise var(--dur-long) var(--ease-out) both;
+  }
+
+  @media (min-width: 640px) {
+    .cdw .cdw-panel {
+      transform-origin: bottom right;
+      animation: cdw-rise var(--dur-short) var(--ease-out) both;
+    }
+  }
+
+  .cdw .cdw-dot {
+    animation: cdw-fade 1.2s var(--ease-in-out) infinite;
+  }
+
+  .cdw .cdw-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .cdw .cdw-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  .cdw .cdw-caret {
+    animation: cdw-fade 0.9s steps(2, jump-none) infinite;
+  }
+
+  .cdw .cdw-ring--pulse {
+    animation: cdw-fade 1.6s var(--ease-in-out) infinite;
+  }
+
+  .cdw .cdw-ring--late {
+    animation-delay: 0.4s;
+  }
+
+  .cdw .cdw-ring--spin {
+    animation: cdw-spin 1.6s linear infinite;
+  }
+
+  /* Set by the avatar click handler; a short press settle, not a flip. */
+  .cdw .animate-avatar-flip {
+    animation: cdw-press var(--dur-long) var(--ease-out);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cdw .cdw-enter,
+  .cdw .cdw-teaser,
+  .cdw .cdw-panel,
+  .cdw .cdw-dot,
+  .cdw .cdw-caret,
+  .cdw .cdw-ring--pulse,
+  .cdw .cdw-ring--spin,
+  .cdw .animate-avatar-flip {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .cdw .cdw-dot {
+    opacity: 0.6;
+  }
+}
+
+@keyframes cdw-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cdw-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cdw-fade {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes cdw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes cdw-press {
+  0% {
+    transform: scale(0.92);
+  }
+  100% {
+    transform: none;
+  }
+}

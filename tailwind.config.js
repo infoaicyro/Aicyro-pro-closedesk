@@ -25,7 +25,7 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: "class",
-  content: ["./src/pages/**/*.{js,jsx}", "./src/components/**/*.{js,jsx}"],
+  content: ["./src/pages/**/*.{js,jsx}", "./src/Closedesk/**/*.{js,jsx}", "./src/components/**/*.{js,jsx}"],
   theme: {
     extend: {
       colors: {
@@ -39,6 +39,32 @@ module.exports = {
         card: "var(--card-bg)",
         gridLine: "var(--grid-line)",
         footer: "var(--footer-bg)",
+        // Hallmark roles (tokens.css + closedesk.css); every one follows the tenant theme
+        paper: "var(--color-paper)",
+        "paper-2": "var(--color-paper-2)",
+        "paper-3": "var(--color-paper-3)",
+        ink: "var(--color-ink)",
+        "ink-2": "var(--color-ink-2)",
+        rule: "var(--color-rule)",
+        signal: "var(--color-accent)",
+        "signal-ink": "var(--color-accent-ink)",
+        "signal-wash": "var(--color-accent-wash)",
+        focus: "var(--color-focus)",
+        success: "var(--color-success)",
+        danger: "var(--color-danger)",
+        warn: "var(--color-warn)",
+        hover: "var(--color-hover)",
+        selected: "var(--color-selected)",
+      },
+      fontFamily: {
+        body: "var(--font-body)",
+        display: "var(--font-display)",
+        mono: "var(--font-mono)",
+      },
+      borderRadius: {
+        panel: "var(--radius-panel)",
+        control: "var(--radius-control)",
+        chip: "var(--radius-chip)",
       },
       backgroundImage: {
         "card-gradient":
@@ -59,7 +85,7 @@ module.exports = {
 // /** @type {import('tailwindcss').Config} */
 // module.exports = {
 //   darkMode: "class",
-//   content: ["./src/pages/**/*.{js,jsx}", "./src/components/**/*.{js,jsx}"],
+//   content: ["./src/pages/**/*.{js,jsx}", "./src/Closedesk/**/*.{js,jsx}", "./src/components/**/*.{js,jsx}"],
 //   theme: {
 //     extend: {
 //       colors: {
