@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { jsPDF } from "jspdf";
-import Navbar from "../components/Essential/Navbar copy";
+import Navbar from "../components/Essential/Navbar";
 import Footer from "../components/Essential/Footer";
+import { ArrowLeft, ArrowRight, Download, Check, Sparkles, ShieldCheck } from "lucide-react";
 
 const TOTAL_STEPS = 16;
 const CALENDLY_URL = "#";
@@ -683,16 +684,17 @@ export default function FreeWebsiteAudit() {
     return (
       <button
         key={value}
+        type="button"
         onClick={() => handleOptClick(stepName, value, label, isMulti, isAuto)}
-        className={`w-full text-left p-4 rounded-xl text-[0.93rem] border transition-all duration-150 flex items-center justify-between ${
+        className={`w-full text-left p-4 rounded-xl text-sm border transition-colors duration-150 motion-safe:transition-transform motion-safe:hover:-translate-y-0.5 flex items-center justify-between cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 disabled:pointer-events-none ${
           isSelected
-            ? "bg-[var(--secondary)]/10 border-[var(--secondary)] text-[var(--secondary)] scale-[1.015]"
-            : `bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground)] hover:border-[var(--primary)] ${errors[stepName] ? "border-[var(--logo-politico-red)]" : ""}`
+            ? "bg-[var(--primary)]/10 border-[var(--primary)] text-[var(--foreground)] font-semibold shadow-2xs"
+            : `bg-[var(--background)] border-[var(--border-color)] text-[var(--foreground)] hover:border-[var(--primary)]/60 hover:bg-[var(--card-bg)] ${errors[stepName] ? "border-[var(--color-error)]" : ""}`
         }`}
       >
         <span>{label}</span>
         {isSelected && (
-          <span className="text-[var(--secondary)] text-sm font-mono font-bold">
+          <span className="w-5 h-5 rounded-full bg-[var(--primary)] text-[var(--color-accent-ink)] flex items-center justify-center text-xs font-bold shrink-0">
             ✓
           </span>
         )}
@@ -704,7 +706,7 @@ export default function FreeWebsiteAudit() {
     <div className="mb-4">
       <label
         htmlFor={id}
-        className="block font-mono text-[0.6rem] tracking-[0.12em] uppercase text-[var(--foreground-muted)] mb-2"
+        className="block text-xs font-medium text-[var(--foreground-muted)] mb-1.5"
       >
         {label}
       </label>
@@ -715,10 +717,10 @@ export default function FreeWebsiteAudit() {
         value={ans[id] || ""}
         onChange={(e) => handleInputChange(e, id)}
         onBlur={(e) => handleBlur(e, id)}
-        className={`w-full bg-[var(--background)] border ${errors[id] ? "border-[var(--logo-politico-red)]" : "border-[var(--border-color)]"} rounded-lg text-[var(--foreground)] px-4 py-3 focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 transition-all`}
+        className={`w-full bg-[var(--background)] border ${errors[id] ? "border-[var(--color-error)]" : "border-[var(--border-color)]"} rounded-lg text-[var(--foreground)] px-4 py-3 focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 transition-[border-color,box-shadow] duration-150`}
       />
       {errors[id] && (
-        <span className="text-[var(--logo-politico-red)] text-xs mt-1 block">
+        <span className="text-[var(--color-error)] text-xs mt-1 block">
           Please enter a valid {label.toLowerCase()}.
         </span>
       )}
@@ -729,44 +731,52 @@ export default function FreeWebsiteAudit() {
     <>
       <Navbar />
 
-      {/* Background FX */}
-      <div className="fixed inset-0 z-0 pointer-events-none" aria-hidden="true">
-        <div className="absolute inset-0 bg-gradient-to-br from-[var(--hero-from)] via-[var(--hero-via)] to-[var(--hero-to)] opacity-80" />
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-[var(--primary)] rounded-full blur-[120px] opacity-[var(--spotlight-opacity)]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-[var(--secondary)] rounded-full blur-[100px] opacity-[var(--spotlight-opacity)]" />
-      </div>
+      {/* Subtle Background Pattern */}
+      <div
+        className="fixed inset-0 pointer-events-none opacity-20"
+        style={{
+          backgroundImage: `
+            linear-gradient(var(--grid-line) 1px, transparent 1px),
+            linear-gradient(90deg, var(--grid-line) 1px, transparent 1px)
+          `,
+          backgroundSize: "48px 48px",
+          maskImage: "radial-gradient(circle at center, black 40%, transparent 90%)",
+          WebkitMaskImage: "radial-gradient(circle at center, black 40%, transparent 90%)",
+        }}
+        aria-hidden="true"
+      />
 
-      <div className="relative z-10 max-w-6xl mx-auto px-6 pt-32 pb-24 grid grid-cols-1 md:grid-cols-12 gap-12 items-start font-sans">
+      <div id="main" className="relative z-10 max-w-6xl mx-auto px-6 pt-32 pb-24 grid grid-cols-1 md:grid-cols-12 gap-12 items-start">
         {/* Left Rail */}
         <aside className="md:col-span-5 md:sticky top-20">
           <div className="flex items-baseline gap-2 mb-8">
-            <b className="font-bold text-xl text-[var(--foreground)]">
+            <span className="font-bold text-xl text-[var(--foreground)]">
               Free
-              <em className="not-italic text-[var(--primary)]"> Website </em>
+              <span className="text-[var(--primary)] font-bold"> Website </span>
               Lead Audit
-            </b>
-            <span className="font-mono text-[0.65rem] text-[var(--foreground-muted)] tracking-widest uppercase">
+            </span>
+            <span className="text-xs text-[var(--foreground-muted)]">
               by AICYRO
             </span>
           </div>
 
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight leading-tight text-[var(--foreground)] mb-6">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-tight text-[var(--foreground)] mb-6">
             Find out where your website is{" "}
-            <em className="not-italic bg-clip-text text-transparent bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)]">
+            <span className="text-[var(--primary)] font-black">
               losing service leads
-            </em>
+            </span>
             .
           </h1>
-          <p className="text-[var(--foreground-muted)] text-base mb-4 max-w-sm">
-            One question at a time — about 90 seconds. At the end you'll get
+          <p className="text-[var(--foreground-muted)] text-base mb-4 max-w-sm leading-relaxed">
+            One question at a time — about 90 seconds. At the end you&apos;ll get
             your Audit Readiness result and a personalized PDF report of where
             leads are leaking and how to fix it.
           </p>
           <p className="text-sm text-[var(--foreground-muted)] mb-6">
             Built for{" "}
-            <b className="font-semibold text-[var(--foreground)]">
+            <strong className="font-semibold text-[var(--foreground)]">
               HVAC, plumbing, restoration, roofing, pest control, and electrical
-            </b>{" "}
+            </strong>{" "}
             businesses.
           </p>
           <div className="flex flex-wrap gap-2 mb-10">
@@ -774,40 +784,40 @@ export default function FreeWebsiteAudit() {
               (badge) => (
                 <span
                   key={badge}
-                  className="font-mono text-[0.62rem] tracking-[0.1em] uppercase text-[var(--foreground-muted)] border border-[var(--border-color)] rounded-full px-3 py-1.5 bg-[var(--card-bg)]/50"
+                  className="text-xs text-[var(--foreground-muted)] border border-[var(--border-color)] rounded-full px-3 py-1 bg-[var(--card-bg)] shadow-sm"
                 >
                   {badge}
                 </span>
               ),
             )}
-            <span className="font-mono text-[0.62rem] tracking-[0.1em] uppercase text-[var(--logo-upwork-green)] border border-[var(--logo-upwork-green)]/30 rounded-full px-3 py-1.5 bg-[var(--card-bg)]/50">
+            <span className="text-xs text-[var(--logo-upwork-green)] border border-[var(--logo-upwork-green)]/30 rounded-full px-3 py-1 bg-[var(--card-bg)] shadow-sm font-medium">
               Founding 25 eligible
             </span>
           </div>
         </aside>
 
         {/* Form Card */}
-        <main className="md:col-span-7 bg-[var(--card-bg)]/70 border border-[var(--border-color)] rounded-2xl p-6 md:p-10 backdrop-blur-xl shadow-2xl shadow-[var(--primary)]/5 min-h-[500px] flex flex-col justify-center">
+        <main className="md:col-span-7 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-6 md:p-10 shadow-lg min-h-[500px] flex flex-col justify-center">
           {/* Default Form Flow */}
           {!isAnalyzing && !isFinished && (
             <div className="w-full">
-              <div className="flex justify-between items-center font-mono text-[0.65rem] tracking-[0.12em] text-[var(--foreground-muted)] mb-3">
+              <div className="flex justify-between items-center text-xs text-[var(--foreground-muted)] mb-3">
                 <span>
-                  STEP {cur} OF {TOTAL_STEPS}
+                  Step {cur} of {TOTAL_STEPS}
                 </span>
                 <span>{Math.round(((cur - 1) / TOTAL_STEPS) * 100)}%</span>
               </div>
               <div className="h-1.5 bg-[var(--border-color)] rounded-full overflow-hidden mb-6">
                 <div
-                  className="h-full bg-gradient-to-r from-[var(--secondary)] to-[var(--primary)] rounded-full transition-all duration-300 ease-out"
-                  style={{ width: `${((cur - 1) / TOTAL_STEPS) * 100}%` }}
+                  className="h-full bg-[var(--primary)] rounded-full origin-left transition-transform duration-300 ease-out"
+                  style={{ transform: `scaleX(${Math.max(0.01, (cur - 1) / TOTAL_STEPS)})` }}
                 />
               </div>
 
               {/* Reactive Context Strip */}
               {activeContext && (
                 <div
-                  className={`mb-6 p-3 rounded-r-xl border-l-4 text-sm text-[var(--foreground-muted)] ${activeContext.type === "amber" ? "border-l-[var(--logo-politico-red)] bg-[var(--logo-politico-red)]/5" : "border-l-[var(--primary)] bg-[var(--primary)]/5"}`}
+                  className={`mb-6 p-3 rounded-r-xl border-l-4 text-sm text-[var(--foreground-muted)] ${activeContext.type === "amber" ? "border-l-[var(--color-error)] bg-[var(--color-error)]/5" : "border-l-[var(--primary)] bg-[var(--primary)]/5"}`}
                 >
                   {activeContext.text}
                 </div>
@@ -850,7 +860,7 @@ export default function FreeWebsiteAudit() {
                     How do customers actually reach you today?
                   </h2>
                   <p className="text-[var(--foreground-muted)] text-sm mb-6">
-                    Pick everything that's true.
+                    Pick everything that&apos;s true.
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {[
@@ -930,7 +940,7 @@ export default function FreeWebsiteAudit() {
               {cur === 5 && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                   <h2 className="text-xl md:text-2xl font-bold text-[var(--foreground)] mb-2">
-                    What's the most frustrating thing about your website leads
+                    What&apos;s the most frustrating thing about your website leads
                     right now?
                   </h2>
                   <p className="text-[var(--foreground-muted)] text-sm mb-6">
@@ -1008,7 +1018,7 @@ export default function FreeWebsiteAudit() {
                     How often do urgent, same-day jobs come at you?
                   </h2>
                   <p className="text-[var(--foreground-muted)] text-sm mb-6">
-                    The "I need someone TODAY" calls.
+                    The &quot;I need someone TODAY&quot; calls.
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {[
@@ -1033,7 +1043,7 @@ export default function FreeWebsiteAudit() {
               {cur === 8 && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
                   <h2 className="text-xl md:text-2xl font-bold text-[var(--foreground)] mb-6">
-                    It's 9:30 PM. A homeowner with an emergency finds your
+                    It&apos;s 9:30 PM. A homeowner with an emergency finds your
                     website. What happens?
                   </h2>
                   <div className="grid grid-cols-1 gap-3">
@@ -1101,7 +1111,7 @@ export default function FreeWebsiteAudit() {
                     create for you?
                   </h2>
                   <p className="text-[var(--foreground-muted)] text-sm mb-6">
-                    Pick everything you'd want.
+                    Pick everything you&apos;d want.
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {[
@@ -1239,7 +1249,7 @@ export default function FreeWebsiteAudit() {
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 mb-6">
-                    <div className="col-span-1 md:col-span-2 text-xs font-bold text-[var(--primary)] uppercase tracking-wider mb-2 border-b border-[var(--border-color)] pb-2">
+                    <div className="col-span-1 md:col-span-2 text-xs font-semibold text-[var(--primary)] mb-2 border-b border-[var(--border-color)] pb-2">
                       Business Details
                     </div>
                     {renderInput(
@@ -1251,13 +1261,13 @@ export default function FreeWebsiteAudit() {
                     {renderInput("bSite", "Website", "yourcompany.com", "url")}
                     {renderInput("bCity", "City / State", "Dallas, TX")}
                     <div className="mb-4">
-                      <label className="block font-mono text-[0.6rem] tracking-[0.12em] uppercase text-[var(--foreground-muted)] mb-2">
+                      <label className="block text-xs font-medium text-[var(--foreground-muted)] mb-1.5">
                         Team size
                       </label>
                       <select
                         onChange={(e) => handleInputChange(e, "bTeam")}
                         value={ans.bTeam || ""}
-                        className={`w-full bg-[var(--background)] border ${errors.bTeam ? "border-[var(--logo-politico-red)]" : "border-[var(--border-color)]"} rounded-lg text-[var(--foreground)] px-4 py-3 focus:outline-none focus:border-[var(--primary)]`}
+                        className={`w-full bg-[var(--background)] border ${errors.bTeam ? "border-[var(--color-error)]" : "border-[var(--border-color)]"} rounded-lg text-[var(--foreground)] px-4 py-3 focus:outline-none focus:border-[var(--primary)]`}
                       >
                         <option value="">Select…</option>
                         <option>1–2</option>
@@ -1267,24 +1277,24 @@ export default function FreeWebsiteAudit() {
                         <option>50+</option>
                       </select>
                       {errors.bTeam && (
-                        <span className="text-[var(--logo-politico-red)] text-xs mt-1 block">
+                        <span className="text-[var(--color-error)] text-xs mt-1 block">
                           Please select your team size.
                         </span>
                       )}
                     </div>
 
-                    <div className="col-span-1 md:col-span-2 text-xs font-bold text-[var(--primary)] uppercase tracking-wider mt-2 mb-2 border-b border-[var(--border-color)] pb-2">
+                    <div className="col-span-1 md:col-span-2 text-xs font-semibold text-[var(--primary)] mt-2 mb-2 border-b border-[var(--border-color)] pb-2">
                       Contact Details
                     </div>
                     {renderInput("cName", "Your name", "Name", "text")}
                     <div className="mb-4">
-                      <label className="block font-mono text-[0.6rem] tracking-[0.12em] uppercase text-[var(--foreground-muted)] mb-2">
+                      <label className="block text-xs font-medium text-[var(--foreground-muted)] mb-1.5">
                         Your role
                       </label>
                       <select
                         onChange={(e) => handleInputChange(e, "cRole")}
                         value={ans.cRole || ""}
-                        className={`w-full bg-[var(--background)] border ${errors.cRole ? "border-[var(--logo-politico-red)]" : "border-[var(--border-color)]"} rounded-lg text-[var(--foreground)] px-4 py-3 focus:outline-none focus:border-[var(--primary)]`}
+                        className={`w-full bg-[var(--background)] border ${errors.cRole ? "border-[var(--color-error)]" : "border-[var(--border-color)]"} rounded-lg text-[var(--foreground)] px-4 py-3 focus:outline-none focus:border-[var(--primary)]`}
                       >
                         <option value="">Select…</option>
                         <option>Owner</option>
@@ -1297,7 +1307,7 @@ export default function FreeWebsiteAudit() {
                         <option>Other</option>
                       </select>
                       {errors.cRole && (
-                        <span className="text-[var(--logo-politico-red)] text-xs mt-1 block">
+                        <span className="text-[var(--color-error)] text-xs mt-1 block">
                           Please select your role.
                         </span>
                       )}
@@ -1309,35 +1319,43 @@ export default function FreeWebsiteAudit() {
               )}
 
               {/* Navigation */}
-              <div className="flex gap-4 mt-8">
+              <div className="flex items-center gap-3 mt-8">
                 <button
+                  type="button"
                   onClick={prevStep}
                   disabled={cur === 1}
-                  className={`flex-none px-6 py-4 font-bold rounded-xl border border-[var(--border-color)] text-[var(--foreground-muted)] transition-all ${cur === 1 ? "opacity-0 pointer-events-none" : "hover:text-[var(--foreground)] hover:border-[var(--primary)]"}`}
+                  className={`inline-flex items-center justify-center p-3.5 rounded-xl border border-[var(--border-color)] text-[var(--foreground)] bg-[var(--background)] hover:border-[var(--primary)] transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:opacity-0 disabled:pointer-events-none cursor-pointer ${
+                    cur === 1 ? "opacity-0 pointer-events-none" : ""
+                  }`}
+                  aria-label="Previous step"
                 >
-                  ←
+                  <ArrowLeft size={18} aria-hidden="true" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => nextStep()}
-                  className="flex-1 px-6 py-4 font-bold rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg hover:shadow-[var(--primary)]/30 hover:-translate-y-0.5 transition-all"
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 font-bold rounded-xl bg-[var(--primary)] hover:bg-[var(--secondary)] text-[var(--color-accent-ink)] shadow-xs transition-colors duration-150 motion-safe:transition-transform motion-safe:hover:-translate-y-0.5 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap"
                 >
-                  {cur === TOTAL_STEPS ? "Get My Audit Report →" : "Next →"}
+                  <span>{cur === TOTAL_STEPS ? "Generate Custom Audit Blueprint" : "Next Step"}</span>
+                  <ArrowRight size={17} className="shrink-0" aria-hidden="true" />
                 </button>
               </div>
 
               <p className="text-center text-xs text-[var(--foreground-muted)] mt-4">
                 {cur === TOTAL_STEPS
-                  ? "Free · Your PDF generates on the next screen"
-                  : "Free · No obligation · Your info is never shared"}
+                  ? "Free. Your PDF generates on the next screen"
+                  : "Free. No obligation. Your info is never shared"}
               </p>
             </div>
           )}
 
           {/* Analyzing State */}
           {isAnalyzing && (
-            <div className="w-full py-20 flex flex-col items-center justify-center animate-in fade-in zoom-in-95 duration-500">
-              <div className="w-12 h-12 rounded-full border-4 border-[var(--primary)]/20 border-t-[var(--primary)] animate-spin mb-6" />
-              <p className="font-mono text-xs tracking-widest text-[var(--foreground-muted)] h-5">
+            <div className="w-full py-20 flex flex-col items-center justify-center relative">
+              <div className="relative mb-6">
+                <div className="w-16 h-16 rounded-full border-4 border-[var(--primary)]/20 border-t-[var(--primary)] animate-spin" />
+              </div>
+              <p className="text-xs font-semibold text-[var(--primary)] h-5 animate-pulse">
                 {analyzeText}
               </p>
             </div>
@@ -1345,14 +1363,16 @@ export default function FreeWebsiteAudit() {
 
           {/* Results State */}
           {isFinished && resultData && (
-            <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <span
-                className={`inline-block font-mono text-[0.68rem] tracking-widest px-4 py-2 rounded-full mb-6 border ${resultData.tier === "high" ? "border-[var(--secondary)] text-[var(--secondary)] bg-[var(--secondary)]/10" : resultData.tier === "medium" ? "border-[var(--primary)] text-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border-color)] text-[var(--foreground-muted)] bg-[var(--background)]"}`}
+            <div className="w-full">
+              <div
+                className={`inline-flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full mb-6 border shadow-sm ${resultData.tier === "high" ? "border-[var(--secondary)] text-[var(--secondary)] bg-[var(--secondary)]/10" : resultData.tier === "medium" ? "border-[var(--primary)] text-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border-color)] text-[var(--foreground-muted)] bg-[var(--background)]"}`}
               >
-                AUDIT READINESS:{" "}
-                {resultData.tier ? resultData.tier.toUpperCase() : "EVALUATING"}{" "}
-                FIT
-              </span>
+                <span>
+                  Audit readiness:{" "}
+                  {resultData.tier ? resultData.tier.toLowerCase() : "evaluating"}{" "}
+                  fit
+                </span>
+              </div>
 
               <h2 className="text-2xl md:text-3xl font-extrabold text-[var(--foreground)] mb-3 leading-tight">
                 Your AI audit is ready, {resultData.name.split(" ")[0]}.
@@ -1363,7 +1383,7 @@ export default function FreeWebsiteAudit() {
               </p>
 
               <div className="bg-[var(--background)] border border-[var(--border-color)] rounded-xl p-5 mb-6">
-                <span className="block font-mono text-[0.62rem] tracking-[0.14em] uppercase text-[var(--primary)] mb-4">
+                <span className="block text-xs font-semibold text-[var(--primary)] mb-4">
                   Key Insights Found
                 </span>
                 <ul className="space-y-3">
@@ -1373,13 +1393,13 @@ export default function FreeWebsiteAudit() {
                         key={i}
                         className="flex gap-3 text-sm text-[var(--foreground-muted)]"
                       >
-                        <span className="text-[var(--secondary)] font-mono shrink-0">
+                        <span className="text-[var(--secondary)] shrink-0" aria-hidden="true">
                           ▸
                         </span>
                         <span>
-                          <b className="text-[var(--foreground)] font-semibold">
+                          <strong className="text-[var(--foreground)] font-semibold">
                             {insight.title}
-                          </b>
+                          </strong>
                         </span>
                       </li>
                     ))}
@@ -1388,15 +1408,17 @@ export default function FreeWebsiteAudit() {
 
               <div className="flex flex-col gap-3 mt-8">
                 <button
+                  type="button"
                   onClick={generatePDF}
-                  className="w-full px-6 py-4 font-bold rounded-xl bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg hover:shadow-[var(--primary)]/30 hover:-translate-y-0.5 transition-all"
+                  className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 font-bold rounded-xl bg-[var(--primary)] hover:bg-[var(--secondary)] text-[var(--color-accent-ink)] shadow-xs transition-colors duration-150 motion-safe:transition-transform motion-safe:hover:-translate-y-0.5 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap"
                 >
-                  ⬇ Download Visual Blueprint (PDF)
+                  <Download size={18} className="shrink-0" aria-hidden="true" />
+                  <span>Download Visual Blueprint (PDF)</span>
                 </button>
 
                 <a
                   href={SITE_URL}
-                  className="w-full text-center px-6 py-4 font-bold rounded-xl border border-[var(--border-color)] text-[var(--foreground)] hover:border-[var(--primary)] transition-all mt-2"
+                  className="w-full text-center px-6 py-3.5 font-semibold text-sm rounded-xl border border-[var(--border-color)] text-[var(--foreground)] hover:border-[var(--primary)] transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] shadow-2xs"
                 >
                   Return to Website
                 </a>
