@@ -1,8 +1,23 @@
 // src/pages/api/openai-token.js
 import { getMasterRuleBook, POLICY_VERSION } from "../../lib/ruleBook";
 import { withApiLogger } from "../../lib/apiMiddleware";
+import { resolveTenantId } from "../../lib/tenantResolver";
 import { db } from "../../lib/firebase";
 import { ref, get } from "firebase/database";
+import { recordAuthoritativeAiTrace } from "../../lib/aiTracer";
+import {
+  validateRequestBodySize,
+  acquireConcurrencySlot,
+  checkAndReserveBudget,
+} from "../../lib/publicEndpointGuard";
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '16kb',
+    },
+  },
+};
 
 // --- SECURITY: Rate Limiting ---
 const rateLimitMap = new Map();
@@ -24,14 +39,46 @@ function generateHash(str) {
 
 async function handler(req, res, apiLogger) {
   if (req.method !== "POST")
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({ error: "Method not allowed", code: "METHOD_NOT_ALLOWED" });
+
+  // 1. Enforce 16KB body size cap (returns 413)
+  if (!validateRequestBodySize(req, res, 16384)) return;
 
   try {
-    const { session_id, retrievedKnowledge = "" } = req.body || {};
+    const tenantId = resolveTenantId(req);
+    const isTenant = tenantId && tenantId !== "default";
 
-    if (!session_id || !isValidSessionId(session_id)) {
-      return res.status(400).json({ error: "A valid session_id is required." });
+    // 2. Concurrency Check (returns 429)
+    const concurrency = acquireConcurrencySlot(tenantId, 5);
+    if (!concurrency.allowed) {
+      return res.status(429).json({ error: concurrency.error, code: "CONCURRENCY_LIMIT_EXCEEDED", tenantId });
     }
+
+    // 3. Budget Check & Reservation (returns 429)
+    const budget = checkAndReserveBudget(tenantId, 500);
+    if (!budget.allowed) {
+      concurrency.release();
+      return res.status(429).json({ error: budget.error, code: budget.code, tenantId });
+    }
+
+    // 🚨 SECURITY GATE: Verify tenant validity
+    if (isTenant) {
+      const tenantSnap = await get(ref(db, `tenants/${tenantId}`));
+      if (!tenantSnap.exists()) {
+        apiLogger.warn("security", "unauthorized_fake_tenant_voice_token_access", {
+          context: { tenantId }
+        });
+        return res.status(404).json({ error: `Tenant '${tenantId}' not found or unauthorized.` });
+      }
+    }
+
+    const { session_id: rawSessionId, retrievedKnowledge = "" } = req.body || {};
+
+    // Auto-generate a valid session_id if none provided or validate existing
+    const session_id =
+      rawSessionId && isValidSessionId(rawSessionId)
+        ? rawSessionId
+        : `lead_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     // --- SECURITY: Enforce Rate Limits ---
     const clientIp =
@@ -65,8 +112,12 @@ async function handler(req, res, apiLogger) {
     let privacyPatch = [];
     let factualSummary = "No prior conversation.";
 
+    const prospectPath = isTenant ? `tenants/${tenantId}/prospects/${session_id}` : `prospects/${session_id}`;
     try {
-      const prospectSnap = await get(ref(db, `prospects/${session_id}`));
+      let prospectSnap = await get(ref(db, prospectPath));
+      if (!prospectSnap.exists() && isTenant) {
+        prospectSnap = await get(ref(db, `prospects/${session_id}`));
+      }
       if (prospectSnap.exists()) {
         const prospectData = prospectSnap.val();
         serverContext = prospectData.context_patch || {};
@@ -83,6 +134,7 @@ async function handler(req, res, apiLogger) {
       "voice",
       serverContext,
       retrievedKnowledge,
+      tenantId,
     );
 
     // --- HARD ROLLBACK GATE ---
@@ -243,11 +295,31 @@ async function handler(req, res, apiLogger) {
 
     const data = await response.json();
     if (!response.ok)
-      return res.status(response.status).json({ error: data.error?.message });
+      {
+        budget.commit(0);
+        concurrency.release();
+        return res.status(response.status).json({ error: data.error?.message });
+      }
+
+    budget.commit(500);
+    concurrency.release();
+
+    recordAuthoritativeAiTrace({
+      provider: "openai-realtime",
+      model: "gpt-4o-realtime-preview",
+      tenantId,
+      sessionId: session_id,
+      operation: "voice_token",
+      usage: { total_tokens: "unknown", prompt_tokens: "unknown", completion_tokens: "unknown" },
+      status: "completed",
+      estimatedCostUsd: "unknown",
+    });
 
     res.status(200).json({ ...data, versions: sessionVersions });
   } catch (error) {
     apiLogger.error("Token Generation Failure:", error);
+    if (typeof budget !== 'undefined' && budget?.commit) budget.commit(0);
+    if (typeof concurrency !== 'undefined' && concurrency?.release) concurrency.release();
     res.status(500).json({ error: "Failed to generate session token" });
   }
 }
