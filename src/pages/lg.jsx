@@ -361,14 +361,14 @@ export default function LeadsDashboard() {
             <span className="cd-wordmark" title={sidebarBrandName}>
               {sidebarBrandName} <span className="text-ink-2">Pulse</span>
             </span>
-            <button
+            {/* <button
               type="button"
               onClick={() => setIsSidebarOpen(false)}
               className="cd-icon-btn cd-menu-btn ml-auto"
               aria-label="Close navigation"
             >
               <X aria-hidden="true" />
-            </button>
+            </button> */}
           </div>
 
           <nav className="cd-side__scroll">
