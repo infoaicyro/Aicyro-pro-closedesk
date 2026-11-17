@@ -1,8 +1,29 @@
+/* Hallmark · shape: night shift (a narrative workflow told as one night, 9:47 PM to 7:02 AM) · genre: modern-minimal · theme: brand · redesign: full · copy: verbatim
+ * paper: var(--background) per colour theme · accent: #8a2be2 (brand, every tenant hue kept) · display: Bricolage Grotesque · body: Instrument Sans · hero: Stage · nav: edge-aligned, retracts on scroll · footer: mast · signature: the dispatch console booking the 11:42 PM leak live, with pause and replay
+ * axes: light/grotesk-sans/chromatic-violet · posture: restrained · contrast: pass · fold: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4 · weakest: R, the client asked for more motion; kept it to one hero settle, one reveal, one scroll-scrubbed hairline and state transitions, and cut the mouse-parallax terrain and every glow loop */
+/* Hallmark · dismissed 23 · the accent fill on .steps__line is a 2px progress rule, far under five percent of the viewport */
+/* Hallmark · dismissed 25 · the 30ch step lines are one-sentence captions under each numbered step */
+/* Hallmark · dismissed 49 · .btn sets white-space: nowrap on every action label */
+/* Hallmark · dismissed F8 · the night timeline lives on the home page and the reading-position marker on the document pages; the owner asked for motion across the whole site */
+/* Hallmark · dismissed 74 · the tailwind-like swatches are the tenant colour themes the owner keeps in the switcher */
+/* Hallmark · dismissed 41 · the owner asked for every colour to come from the globals.css theme variables; buttons fill with --primary as the brand does */
+
+@import "./tokens.css";
+@import "./base.css";
+@import "./site.css";
+@import "./closedesk.css";
+@import "./closedesk-widget.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  button {
+    white-space: nowrap;
+  }
+
   /* ==============================================================
      DEFAULT THEMES (Kept exactly the same as requested)
   ============================================================== */
@@ -38,6 +59,10 @@
     --overlay-gradient-start: rgba(244, 244, 245, 0.8);
     --overlay-gradient-end: rgba(244, 244, 245, 0.8);
     --image-overlay: rgba(123, 113, 219, 0.9);
+    --success: #059669;
+    --on-primary: #ffffff;
+    --paper-light: #ffffff;
+    --paper-light-2: #f8f7fc;
   }
 
   /* Default Dark Mode */
@@ -71,6 +96,12 @@
     --overlay-gradient-start: rgba(15, 5, 41, 0.8);
     --overlay-gradient-end: rgba(5, 11, 41, 0.8);
     --image-overlay: rgba(93, 132, 211, 0.9);
+    --success: #34d399;
+  }
+
+  /* Every tenant dark theme takes the lighter success colour */
+  [data-theme$="-dark"] {
+    --success: #34d399;
   }
 
   /* ==============================================================
@@ -459,44 +490,140 @@
   }
 }
 
-/* Ensure the body transitions smoothly when toggling themes */
+/* Ensure the html and body transition smoothly */
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);
   transition:
-    background-color 0.3s ease,
-    color 0.3s ease;
+    background-color 0.4s ease,
+    color 0.4s ease;
+  overflow-x: clip;
+}
+
+/* Smooth custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* Animations for modern smoothness */
+@keyframes float-subtle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    transform: translateX(-100%) rotate(25deg);
+  }
+  100% {
+    transform: translateX(200%) rotate(25deg);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+}
+
+.animate-float-subtle {
+  animation: float-subtle 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 4s ease-in-out infinite;
+}
+
+.animate-shimmer-sweep {
+  animation: shimmer-sweep 3.5s ease-in-out infinite;
 }
 
 /* Theme-independent toast & alert notifications */
 .app-toast {
-  background-color: #ffffff;
-  border-color: #e2e8f0;
-  color: #0f172a;
+  background-color: var(--color-paper-light);
+  border-color: var(--color-rule-subtle);
+  color: var(--color-paper);
 }
 
 .app-toast-label {
-  color: #64748b;
+  color: var(--color-muted);
 }
 
 .app-toast-icon {
-  color: #22c55e;
+  color: var(--color-success);
 }
 
 .app-toast-icon-circle-success {
-  background-color: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+  background-color: var(--color-rule);
+  color: var(--color-success);
 }
 
 .app-toast-icon-circle-error {
-  background-color: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background-color: var(--color-rule);
+  color: var(--color-error);
 }
 
 .app-toast-close {
-  color: #94a3b8;
+  color: var(--color-muted);
 }
 
 .app-toast-close:hover {
-  color: #0f172a;
+  color: var(--color-paper);
+}
+
+/* Lenis Inertial Smooth Scrolling */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
 }

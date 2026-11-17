@@ -1,0 +1,105 @@
+:root {
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+  --space-2xl: 64px;
+  --space-3xl: 96px;
+  --space-4xl: 144px;
+
+  --text-xs: 0.8125rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5625rem;
+  --text-2xl: 1.953rem;
+  --text-3xl: 2.441rem;
+
+  --text-display-s: clamp(2.25rem, 4vw + 0.5rem, 3.75rem);
+  --text-display: clamp(2.75rem, 5vw + 1rem, 5.25rem);
+  --text-section: clamp(2rem, 2.5vw + 1rem, 3.5rem);
+  --text-title: clamp(1.25rem, 0.75vw + 0.875rem, 1.625rem);
+  --text-lead: clamp(1.125rem, 0.35vw + 1rem, 1.375rem);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 420ms;
+  --dur-reveal: 720ms;
+
+  --color-error: var(--accent-blue);
+  --color-success: var(--success);
+
+  --container: 1440px;
+  --gutter: 64px;
+  --gap-columns: 32px;
+  --section-gap-s: 120px;
+  --section-gap: 144px;
+  --section-gap-l: 176px;
+
+  --z-base: 1;
+  --z-raised: 10;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-sticky-nav: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  --z-tooltip: 600;
+
+  /* Brand palette, wired to the colour themes in globals.css (light, dark and every tenant hue) */
+  --color-paper: var(--background);
+  --color-paper-2: color-mix(in oklch, var(--card-bg) 55%, var(--background));
+  --color-paper-3: var(--card-bg);
+  --color-paper-light: var(--paper-light);
+  --color-paper-light-2: var(--paper-light-2);
+
+  --color-ink: var(--foreground);
+  --color-ink-2: var(--foreground-muted);
+  --color-muted: var(--foreground-muted);
+
+  --color-rule: var(--border-color);
+  --color-rule-subtle: color-mix(in oklch, var(--border-color) 60%, transparent);
+
+  --color-accent: var(--primary);
+  --color-accent-hover: var(--secondary);
+  --color-accent-fill: var(--primary);
+  --color-accent-fill-hover: var(--secondary);
+  --color-accent-wash: color-mix(in oklch, var(--primary) 9%, transparent);
+  --color-accent-ink: var(--on-primary);
+  --color-focus: var(--primary);
+
+  --color-loss: var(--accent-blue);
+  --color-loss-wash: color-mix(in oklch, var(--accent-blue) 12%, transparent);
+
+  /* Operator app status colours (closedesk.css) */
+  --color-danger: oklch(52% 0.19 27);
+  --color-warn: oklch(52% 0.12 70);
+
+
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-outlier: var(--font-body);
+
+  --radius-card: 16px;
+  --radius-card-lg: 24px;
+  --radius-input: 12px;
+  --radius-pill: 999px;
+  --rule-hair: 1px;
+  --shadow-card: 0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent);
+  --shadow-lift: 0 18px 40px -24px color-mix(in oklch, var(--foreground) 35%, transparent);
+
+  --tracking-display: -0.025em;
+}
+
+[data-theme$="dark"] {
+  --color-danger: oklch(70% 0.16 25);
+  --color-warn: oklch(78% 0.12 75);
+  --shadow-card: 0 0 0 1px var(--border-color);
+  --shadow-lift: 0 18px 40px -24px color-mix(in oklch, var(--background) 85%, transparent);
+}
