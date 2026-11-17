@@ -9,6 +9,7 @@ import {
   Users,
   CalendarCheck,
   ChartLine,
+  Cookie,
   FileText,
   Settings,
   LogOut,
@@ -84,7 +85,6 @@ export default function LeadsDashboard() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarBrandName, setSidebarBrandName] = useState("Aicyro Pulse");
   const [isSettingsExpanded, setIsSettingsExpanded] = useState(false);
-  const [isInsightExpanded, setIsInsightExpanded] = useState(false);
 
   // =========================================================================
   // --- TERMINATE SESSION ON PAGE RELOAD ---
@@ -321,15 +321,14 @@ export default function LeadsDashboard() {
     return titles[currentView] || "Dashboard";
   };
 
+  // Flat main menu, in this order; Insight opens the Insight Overview directly
   const mainNav = [
     { view: "home", label: "Pulse", Icon: Activity },
+    { view: "cookie_data", label: "Cookie", Icon: Cookie },
     { view: "terminal", label: "Leads", Icon: Users },
     { view: "bookings", label: "Booking", Icon: CalendarCheck },
-  ];
-
-  const insightNav = [
-    { view: "insight", label: "Insight Overview" },
-    { view: "cookie_data", label: "Cookie Data" },
+    { view: "insight", label: "Insight", Icon: ChartLine },
+    { view: "reports", label: "Reports", Icon: FileText },
   ];
 
   const settingsNav = [
@@ -339,7 +338,6 @@ export default function LeadsDashboard() {
     { view: "apearance", label: "Appearance Themes" },
   ];
 
-  const isInsightActive = currentView === "insight" || currentView === "cookie_data";
   const isSettingsActive = settingsNav.some((item) => item.view === currentView);
 
   const navProps = (view) => ({
@@ -382,35 +380,6 @@ export default function LeadsDashboard() {
                 {label}
               </button>
             ))}
-
-            <div>
-              <button
-                type="button"
-                onClick={() => setIsInsightExpanded(!isInsightExpanded)}
-                className="cd-nav-item"
-                aria-expanded={isInsightExpanded}
-                aria-controls="cd-nav-insight"
-                data-active={isInsightActive ? "true" : undefined}
-              >
-                <ChartLine aria-hidden="true" />
-                <span className={isInsightActive ? "font-semibold text-ink" : undefined}>Insight</span>
-                <ChevronDown aria-hidden="true" className="cd-nav-item__chev" />
-              </button>
-              {isInsightExpanded && (
-                <div id="cd-nav-insight" className="cd-nav-sub">
-                  {insightNav.map(({ view, label }) => (
-                    <button key={view} className="cd-nav-item cd-nav-item--sub" {...navProps(view)}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <button className="cd-nav-item" {...navProps("reports")}>
-              <FileText aria-hidden="true" />
-              Reports
-            </button>
 
             <p className="cd-side__heading">Workspace</p>
 
