@@ -22,6 +22,26 @@ import { ref, get } from "firebase/database";
  */
 export const POLICY_VERSION = "2.14.0";
 
+// Voices the OpenAI Realtime API accepts for the voice agent
+export const REALTIME_VOICES = ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"];
+
+// Amazon Polly voices offered in Chatbot Settings (used for read-aloud) -> closest realtime voice
+const POLLY_TO_REALTIME = {
+  joanna: "coral",
+  salli: "shimmer",
+  ruth: "marin",
+  matthew: "ash",
+  justin: "echo",
+  stephen: "cedar",
+};
+
+/** Returns a voice the realtime agent accepts, whatever voice the settings stored. */
+export function toRealtimeVoice(voice) {
+  const key = String(voice || "").trim().toLowerCase();
+  if (REALTIME_VOICES.includes(key)) return key;
+  return POLLY_TO_REALTIME[key] || "ash";
+}
+
 export async function getMasterRuleBook(
   mode = "text",
   currentLeadData = null,
@@ -160,8 +180,10 @@ export async function getMasterRuleBook(
           data.additionalConversationalRules || botConfig.additionalConversationalRules,
         basePrompt: data.basePrompt || botConfig.basePrompt,
         tone: data.tone || botConfig.tone,
+        // botVoice may be an Amazon Polly voice (used by read-aloud / TTS); the realtime
+        // voice agent only accepts OpenAI voices, so it gets a matching OpenAI voice.
         botVoice: data.botVoice || data.voice || botConfig.voice,
-        voice: data.botVoice || data.voice || botConfig.voice,
+        voice: toRealtimeVoice(data.botVoice || data.voice || botConfig.voice),
         voiceChatAgent: voiceActive,
         voiceEnabled: voiceActive,
         photoUploads: photoActive,
