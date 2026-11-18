@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import Seo from "../components/Essential/Seo";
+import Seo, { SITE_URL } from "../components/Essential/Seo";
 import Hero from "@/components/Home/Hero";
 import Problem from "@/components/Home/Problem";
 import Popupform from "@/components/Form/Popupform";
@@ -12,7 +12,18 @@ import Compare from "@/components/Home/Compare";
 import NotFor from "@/components/Home/NotFor";
 import Trust from "@/components/Home/Trust";
 import Offer from "@/components/Home/Offer";
-import Faq from "@/components/Home/Faq";
+import Faq, { faqData } from "@/components/Home/Faq";
+
+// FAQPage rich result, built from the same answers the FAQ section shows
+const FAQ_SCHEMA = {
+  "@type": "FAQPage",
+  "@id": `${SITE_URL}/#faq`,
+  mainEntity: faqData.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: { "@type": "Answer", text: item.answer },
+  })),
+};
 import CTA from "@/components/Home/Cta";
 
 export default function Home() {
@@ -20,7 +31,7 @@ export default function Home() {
 
   return (
     <>
-      <Seo />
+      <Seo path="/" schema={[FAQ_SCHEMA]} />
 
       <Navbar onOpenPopup={() => setIsPopupOpen(true)} />
 

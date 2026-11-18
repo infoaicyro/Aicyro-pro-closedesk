@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { jsPDF } from "jspdf";
 import Navbar from "../components/Essential/Navbar";
 import Footer from "../components/Essential/Footer";
+import Seo from "../components/Essential/Seo";
 import { ArrowLeft, ArrowRight, Download, Check, Sparkles, ShieldCheck } from "lucide-react";
 
 const TOTAL_STEPS = 16;
@@ -729,6 +730,11 @@ export default function FreeWebsiteAudit() {
 
   return (
     <>
+      <Seo
+        title="Free Website Lead Audit for Field Service Businesses | Aicyro"
+        description="Find out where your website is losing service leads. Answer a few quick questions and get your Audit Readiness result plus a free personalized PDF report."
+        ogDescription="A free 90-second audit that shows where your website is losing service leads, with a personalized PDF report on how to fix it."
+      />
       <Navbar />
 
       {/* Subtle Background Pattern */}

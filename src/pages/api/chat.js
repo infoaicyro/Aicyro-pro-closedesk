@@ -300,7 +300,11 @@ async function handler(req, res, apiLogger) {
           actualTokensRecorded = completion?.usage?.total_tokens;
           const rawContent = completion.choices[0].message.content;
           const aiResponse = safeParseAiResponse(apiLogger, rawContent, aiContext);
-          
+
+          // A reply with no text (e.g. only a context patch) gets one retry before the generic fallback
+          const hasReply = typeof aiResponse?.reply === "string" && aiResponse.reply.trim();
+          if (!hasReply && attempt < 2) throw new Error("Model response had no reply text.");
+
           return validateAndSanitizePayload(aiResponse);
         }
       );
@@ -325,6 +329,13 @@ async function handler(req, res, apiLogger) {
     const finalBooking = { ...serverBooking, ...(validatedData.context_patch.booking_request || {}) };
     const finalPrivacyPatch = Array.from(new Set([...(existingProspect.privacy_patch || []), ...(validatedData.privacy_patch || [])]));
     const finalFlags = Array.from(new Set([...(existingProspect.flags || []), ...(validatedData.flags || [])]));
+
+    // A meeting can only be booked once both the name and the email are known
+    if (validatedData.next_action === "SCHEDULE_CONSULTATION") {
+      const hasName = Boolean(String(finalContact.name || mergedLeadData.name || "").trim());
+      const hasEmail = Boolean(String(finalContact.email || mergedLeadData.email || "").trim());
+      if (!hasName || !hasEmail) validatedData.next_action = "NONE";
+    }
 
     const backendPayload = {
       session_id, channel, last_updated: serverTimestamp, versions: sessionVersions,

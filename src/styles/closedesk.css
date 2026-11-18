@@ -10,6 +10,7 @@
 /* Hallmark · dismissed 49 · ClientManagement and Insight labels sit on .cd-btn, which sets white-space: nowrap; sloplint reads class, the JSX writes className */
 /* Hallmark · answered F1 · the straight quotes in Chatbotsetting are inside an SVG code placeholder, where curly quotes would break the pasted markup */
 /* Hallmark · answered F2 · the three dots at Chatbotsetting line 504 sit inside an <svg>...</svg> code example the owner pastes, so they stay literal */
+/* Hallmark · dropped report-type-title, report-params-title · the Reports left rail became a tab strip (aria-label Report Type) and a labelled Timeframe select, so the two panel headings those ids named are gone */
 
 /* The CloseDesk operator app (/lg, the super admin console, the chatbot widget).
    Every rule is scoped under .cd-app or .cdw so the public site keeps its own look.
@@ -510,6 +511,11 @@
 
   .cd-stat:nth-child(n + 3) {
     border-top: var(--rule-hair) solid var(--color-rule);
+  }
+
+  /* An odd figure out takes the whole last row instead of leaving an orphan cell */
+  .cd-stat:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 }
 

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 
-const faqData = [
+export const faqData = [
   {
     question: "Where are you based?",
     answer:

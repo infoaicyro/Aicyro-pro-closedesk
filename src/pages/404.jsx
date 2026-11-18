@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { ArrowLeft } from "lucide-react";
 import Navbar from "../components/Essential/Navbar";
+import Seo from "../components/Essential/Seo";
 
 export default function Custom404() {
   const router = useRouter();
 
   return (
     <>
+      <Seo title="Page not found | CloseDesk by Aicyro" description="This page does not exist." noindex />
       <Navbar />
       <main id="main" className="nf">
         <div className="wrap nf__grid">
