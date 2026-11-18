@@ -226,13 +226,17 @@ async function handler(req, res, apiLogger) {
           {
             type: "function",
             name: "request_consultation",
-            description: "Request to book a demo or consultation.",
+            description: "Book a meeting with the team. Only call this once the visitor has agreed to book and has given their full name and email address.",
             parameters: {
               type: "object",
               properties: {
+                name: { type: "string", description: "Visitor's full name (required)" },
+                email: { type: "string", description: "Visitor's email address (required)" },
+                phone_number: { type: "string", description: "Optional" },
                 preferred_date: { type: "string" },
                 preferred_time: { type: "string" },
               },
+              required: ["name", "email"],
             },
           },
           {

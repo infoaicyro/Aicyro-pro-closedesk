@@ -1,4 +1,4 @@
-// src/pages/layout.jsx
+// src/components/Essential/RootLayout.jsx (was src/pages/layout.jsx, which also made a public /layout route)
 import { useRouter } from "next/router";
 import AicyroChatbot from "@/Closedesk/Chatbot/AicyroChatbot";
 import { isInternalPath } from "@/lib/routeScopes";

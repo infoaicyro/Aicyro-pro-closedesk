@@ -1,0 +1,14 @@
+{
+  "name": "CloseDesk by Aicyro",
+  "short_name": "CloseDesk",
+  "description": "24/7 AI booking desk and CRM for field service businesses.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#f4f4f5",
+  "theme_color": "#8a2be2",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

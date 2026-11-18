@@ -1088,7 +1088,7 @@ export default function AicyroChatbot({ tenantId: propTenantId } = {}) {
         let currentBookingStatus = leadData.booking_status || "In Progress"; let requestedAction = leadData.requested_action || "In Progress";
 
         const explicitBookingIntent = /\b(book|schedule|appointment|meeting|demo|calendar|consultation)\b/i.test(val);
-        const hasContactInfoForBooking = Boolean((contactInfo.name || leadData.name) && (contactInfo.email || leadData.email) && (contactInfo.phone || leadData.phone));
+        const hasContactInfoForBooking = Boolean((contactInfo.name || leadData.name) && (contactInfo.email || leadData.email));
         const shouldTriggerDirectBooking = (data.next_action === "SCHEDULE_CONSULTATION" || data.ready_to_book === true || extracted.ready_to_book === true) ||
           (isBookingToolActive && explicitBookingIntent && hasContactInfoForBooking);
 

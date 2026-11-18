@@ -156,7 +156,34 @@ async function handler(req, res, apiLogger) {
         resultPayload.message = auditIsNew ? "Audit submitted successfully." : "Audit already submitted.";
         break;
 
-      case "request_consultation":
+      case "request_consultation": {
+        // Name and email are mandatory before a meeting can be booked
+        const bookName = String(tool_args.name || mergedContext.contact_info?.name || "").trim();
+        const bookEmail = String(tool_args.email || mergedContext.contact_info?.email || "").trim();
+        if (!bookName || !bookEmail) {
+          return res.status(200).json({
+            success: false,
+            error: `Cannot book yet: missing ${!bookName && !bookEmail ? "name and email" : !bookName ? "name" : "email"}. Ask the visitor for it, then call request_consultation again.`,
+          });
+        }
+        if (!isValidEmail(bookEmail)) {
+          return res.status(200).json({ success: false, error: "Invalid email format. Please ask the user to verify." });
+        }
+        mergedContext.contact_info = {
+          ...mergedContext.contact_info,
+          name: bookName,
+          email: bookEmail,
+          ...(tool_args.phone_number ? { phone: tool_args.phone_number } : {}),
+        };
+        if (tool_args.preferred_date || tool_args.preferred_time) {
+          mergedContext.booking_request = {
+            ...(mergedContext.booking_request || {}),
+            request_type: "consultation",
+            ...(tool_args.preferred_date ? { preferred_date: tool_args.preferred_date } : {}),
+            ...(tool_args.preferred_time ? { preferred_time: tool_args.preferred_time } : {}),
+          };
+        }
+      }
         const consultIsNew = await ensureActionIdempotency("SCHEDULE_CONSULTATION");
         next_action = "SCHEDULE_CONSULTATION";
         apiLogger.info("booking_lifecycle", "booking_requested", { context: { session_id }}); // 🚨 TICKET 10

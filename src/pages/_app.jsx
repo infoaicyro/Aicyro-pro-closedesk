@@ -3,10 +3,11 @@
 // reveal/scroll-spy) on public pages, Multi-tenant routing rules for internal routes.
 import React, { useEffect } from "react";
 import { useRouter } from "next/router";
+import Head from "next/head";
 import { motion, AnimatePresence, MotionConfig } from "framer-motion";
 import { Bricolage_Grotesque, Instrument_Sans } from "next/font/google";
 import "@/styles/globals.css";
-import RootLayout from "./layout";
+import RootLayout from "../components/Essential/RootLayout";
 import ThemeProvider from "../Closedesk/ThemeProvider";
 import GlobalActivityTracker from "../Closedesk/GlobalActivityTracker";
 import CookieConsentBanner from "../components/Essential/CookieConsentBanner";
@@ -97,6 +98,11 @@ export default function App({ Component, pageProps }) {
   if (isInternalRoute) {
     return (
       <ThemeProvider>
+        {/* Operator screens, logs, embeds and QA reports never belong in search results */}
+        <Head>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <meta name="robots" content="noindex, nofollow" />
+        </Head>
         {/* Font variables only; display: contents keeps the layout untouched */}
         <div className={`${displayFont.variable} ${bodyFont.variable}`} style={{ display: "contents" }}>
           <RootLayout>
@@ -109,6 +115,9 @@ export default function App({ Component, pageProps }) {
 
   return (
     <ThemeProvider>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </Head>
       <SmoothScroll />
       <RevealObserver />
       <ScrollSpy />
